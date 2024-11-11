@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 350px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1f36;
+    }
+    
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+    }
+
+    .instructions {
+      font-size: 13px;
+      color: #4f566b;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .instructions a {
+      color: #635bff;
+      text-decoration: none;
+    }
+
+    .instructions a:hover {
+      text-decoration: underline;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1px solid #e3e8ee;
+      border-radius: 6px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #635bff;
+      box-shadow: 0 0 0 1px #635bff;
+    }
+
+    button {
+      width: 100%;
+      padding: 8px 12px;
+      background: #635bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    button:hover {
+      background: #5147d1;
+    }
+
+    #status {
+      margin-top: 12px;
+      font-size: 13px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Setup Gemini API Key</h1>
+  <div class="instructions">
+    1. Visit <a href="https://aistudio.google.com/app/apikey" target="_blank">AI Studio</a><br>
+    2. Click "Get API key"<br>
+    3. Create a new key or select existing<br>
+    4. Paste it below
+  </div>
+  
+  <div class="input-group">
+    <label for="apiKey">API Key</label>
+    <input type="password" id="apiKey" placeholder="AIza...">
+  </div>
+  
+  <button id="save">Save API Key</button>
+  <div id="status"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html> 
