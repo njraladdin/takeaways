@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Captions Extractor",
+  "name": "YouTube Takeaways",
   "version": "1.0",
-  "description": "Extracts captions from YouTube videos",
+  "description": "Turn any long-form YouTube video into bite-sized takeaways and an interactive quiz as you watch. Perfect for podcasts and video essays.",
   "permissions": [
     "scripting",
     "tabs",
@@ -23,7 +23,7 @@
     }
   ],
   "action": {
-    "default_title": "YouTube Captions Extractor",
+    "default_title": "YouTube Takeaways",
     "default_popup": "popup.html"
   }
 }

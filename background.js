@@ -105,13 +105,25 @@ async function getVideoSummary(videoDetails) {
       if (!captionsByMinute[minute]) {
         captionsByMinute[minute] = [];
       }
-      captionsByMinute[minute].push(caption.text);
+      captionsByMinute[minute].push({
+        text: caption.text,
+        start: caption.start
+      });
     });
 
     // Format captions grouped by minute
     const groupedTranscript = Object.entries(captionsByMinute)
-      .map(([minute, texts]) => (
-        `Minute ${minute}:\n${texts.join(' ')}`
+      .map(([minute, captions]) => (
+        `Minute ${minute}:\n${captions.map(caption => {
+          const totalSeconds = Math.floor(caption.start);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const seconds = totalSeconds % 60;
+          const timestamp = hours > 0 
+            ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+            : `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+          return `[${timestamp}] ${caption.text}`;
+        }).join(' ')}`
       ))
       .join('\n\n');
 
@@ -152,7 +164,45 @@ async function getVideoSummary(videoDetails) {
             "significanceScore": number_between_1_and_100,
             "interestScore": number_between_1_and_100
           }
-        ]
+        ],
+        "quiz": {
+          "description": "Test your understanding of the key concepts",
+          "questions": [
+            {
+              "question": "Clear, specific question about an important takeaway",
+              "options": [
+                "Option A (correct answer)",
+                "Option B",
+                "Option C",
+                "Option D"
+              ],
+              "correctIndex": 0,
+              "explanation": "Brief explanation of why this answer is correct"
+            }
+          ]
+        }
+      }
+
+      For the quiz:
+      - Generate exactly 5 questions
+      - Focus on the most practical and actionable takeaways
+      - Questions should test understanding, not just memory
+      - Each question should have exactly 4 options
+      - Include a brief explanation for the correct answer
+      - Make wrong options plausible but clearly incorrect
+      - Ensure questions are specific and based on concrete facts from the video
+      
+      Example quiz question:
+      {
+        "question": "According to the video, what percentage increase in engagement do companies see when posting 3 times per week on LinkedIn?",
+        "options": [
+          "200%",
+          "100%",
+          "150%",
+          "50%"
+        ],
+        "correctIndex": 0,
+        "explanation": "The video specifically mentioned that posting 3 times per week results in 200% higher engagement compared to weekly posters."
       }
 
       For each takeaway:
@@ -229,12 +279,43 @@ async function getVideoSummary(videoDetails) {
 
     // Parse the JSON string into an object
     try {
-      const summaryText = data.candidates[0].content.parts[0].text;
-      const summary = JSON.parse(summaryText);
-      console.log('[YT Video] AI Summary parsed:', summary);
-      return summary;
+      let summaryText = data.candidates[0].content.parts[0].text;
+      
+      // Simplified cleanup that preserves JSON structure
+      summaryText = summaryText
+        // Remove any markdown code block markers
+        .replace(/```json\s*|\s*```/g, '')
+        // Remove any leading/trailing whitespace
+        .trim();
+
+      try {
+        const summary = JSON.parse(summaryText);
+        console.log('[YT Video] AI Summary parsed:', summary);
+        return summary;
+      } catch (firstParseError) {
+        console.warn('[YT Video] First parse attempt failed:', firstParseError);
+        
+        // Try to clean the JSON string more aggressively if needed
+        try {
+          summaryText = summaryText
+            // Remove any potential control characters
+            .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+            // Ensure proper line endings
+            .replace(/\n/g, ' ')
+            // Remove any extra spaces
+            .replace(/\s+/g, ' ');
+            
+          const summary = JSON.parse(summaryText);
+          console.log('[YT Video] AI Summary parsed with cleanup:', summary);
+          return summary;
+        } catch (secondParseError) {
+          console.error('[YT Video] All parsing attempts failed');
+          throw secondParseError;
+        }
+      }
     } catch (parseError) {
       console.error('[YT Video] Failed to parse AI response as JSON:', parseError);
+      console.error('[YT Video] Raw response text:', data.candidates[0].content.parts[0].text);
       return null;
     }
     
@@ -363,27 +444,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'NEW_VIDEO' && message.videoId) {
     console.log('[YT Video] Processing new video:', message.videoId);
     
-    // Process the video
-    getVideoDetails(message).then(async result => {
-      if (result && result.captions.available) {
-        console.log('[YT Video] Video Details:', result);
-        
-        // Check if content is relevant before getting takeaways
-        const isRelevant = await isRelevantContent(result);
-        
-        if (isRelevant) {
-          const takeaways = await getVideoSummary(result);
-          if (takeaways) {
-            // Send takeaways back to content script
+    // Check cache first
+    chrome.storage.local.get(`takeaways_${message.videoId}`, async (result) => {
+      if (result[`takeaways_${message.videoId}`]) {
+        console.log('[YT Video] Found cached takeaways, sending directly');
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: 'VIDEO_TAKEAWAYS',
+          takeaways: result[`takeaways_${message.videoId}`]
+        });
+        return;
+      }
+
+      // If not cached, proceed with normal processing
+      chrome.tabs.sendMessage(sender.tab.id, {
+        type: 'PROCESSING_STATUS',
+        status: 'LOADING_VIDEO_DETAILS'
+      });
+      
+      // Process the video
+      getVideoDetails(message).then(async result => {
+        if (result && result.captions.available) {
+          console.log('[YT Video] Video Details:', result);
+          
+          // Update status - checking relevance
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_STATUS',
+            status: 'CHECKING_RELEVANCE'
+          });
+          
+          const isRelevant = await isRelevantContent(result);
+          
+          if (isRelevant) {
+            // Update status - generating takeaways
             chrome.tabs.sendMessage(sender.tab.id, {
-              type: 'VIDEO_TAKEAWAYS',
-              takeaways: takeaways
+              type: 'PROCESSING_STATUS',
+              status: 'GENERATING_TAKEAWAYS'
+            });
+            
+            const takeaways = await getVideoSummary(result);
+            if (takeaways) {
+              // Send final takeaways
+              chrome.tabs.sendMessage(sender.tab.id, {
+                type: 'VIDEO_TAKEAWAYS',
+                takeaways: takeaways
+              });
+            } else {
+              chrome.tabs.sendMessage(sender.tab.id, {
+                type: 'PROCESSING_ERROR',
+                error: 'Failed to generate takeaways'
+              });
+            }
+          } else {
+            chrome.tabs.sendMessage(sender.tab.id, {
+              type: 'PROCESSING_ERROR',
+              error: 'Content not suitable for takeaways'
             });
           }
         } else {
-          console.log('[YT Video] Content not relevant for takeaways');
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_ERROR',
+            error: 'No captions available'
+          });
         }
-      }
+      });
     });
 
     return true;
