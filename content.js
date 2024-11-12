@@ -27,6 +27,7 @@ function createProgressUI() {
   progressIndicator.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
       <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none; display: flex; align-items: center; gap: 8px;">
+        <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
         Takeaways
         <div class="regeneration-status" style="display: none; align-items: center; gap: 6px; color: #606060; font-size: 12px; font-weight: normal;">
           <div class="regenerating-spinner" style="
@@ -205,7 +206,10 @@ function createQuizCard() {
 
   card.innerHTML = `
     <div class="quiz-header" style="margin-bottom: 16px; text-shadow: none;">
-      <div style="font-size: 16px; font-weight: 500; color: #030303; text-shadow: none;">Knowledge Check</div>
+      <div style="font-size: 16px; font-weight: 500; color: #030303; text-shadow: none; display: flex; align-items: center; gap: 8px;">
+        <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
+        Knowledge Check
+      </div>
     </div>
     <div class="quiz-content" style="text-shadow: none;"></div>
   `;
@@ -972,6 +976,7 @@ function createInitialLoadingUI() {
 
   progressIndicator.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
+      <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
       <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none;">
         Takeaways
       </div>
