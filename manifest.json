@@ -3,6 +3,12 @@
   "name": "YouTube Takeaways",
   "version": "1.0",
   "description": "Turn any long-form YouTube video into bite-sized takeaways and an interactive quiz as you watch. Perfect for podcasts and video essays.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png", 
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "scripting",
     "tabs",
@@ -24,6 +30,12 @@
   ],
   "action": {
     "default_title": "YouTube Takeaways",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }

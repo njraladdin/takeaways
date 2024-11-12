@@ -26,7 +26,20 @@ function createProgressUI() {
 
   progressIndicator.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-      <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none;">Takeaways</div>
+      <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none; display: flex; align-items: center; gap: 8px;">
+        Takeaways
+        <div class="regeneration-status" style="display: none; align-items: center; gap: 6px; color: #606060; font-size: 12px; font-weight: normal;">
+          <div class="regenerating-spinner" style="
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          "></div>
+          <span>Regenerating...</span>
+        </div>
+      </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <button class="play-quiz-button" style="
           background: #0f0f0f;
@@ -583,6 +596,17 @@ function handleRetry() {
   chrome.storage.local.remove(`takeaways_${videoId}`);
   chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
   
+  // Show the regeneration status and disable retry button
+  const statusElement = document.querySelector('.regeneration-status');
+  const retryButton = document.querySelector('.retry-button');
+  
+  if (statusElement) statusElement.style.display = 'flex';
+  if (retryButton) {
+    retryButton.style.opacity = '0.5';
+    retryButton.style.cursor = 'default';
+    retryButton.disabled = true;
+  }
+  
   const content = document.querySelector('.takeaways-content');
   if (content) {
     content.innerHTML = '<div style="padding: 8px 0;">Generating new takeaways...</div>';
@@ -687,6 +711,9 @@ function checkForVideo() {
 
 // Navigation handling
 document.addEventListener('yt-navigate-start', () => {
+  console.log('[YT Captions] Navigation started - clearing state');
+  
+  // Clear video listener
   if (videoTimeUpdateListener) {
     const video = document.querySelector('video');
     if (video) {
@@ -694,17 +721,63 @@ document.addEventListener('yt-navigate-start', () => {
     }
     videoTimeUpdateListener = null;
   }
+  
+  // Reset all state
   videoPlaybackTime = 0;
   currentTakeaways = null;
-  if (takeawaysContainer) {
-    takeawaysContainer.remove();
-    takeawaysContainer = null;
-  }
+  
+  // Clear UI
+  const existingProgress = document.querySelector('.yt-takeaways-progress');
+  const existingTakeaways = document.querySelector('.yt-video-takeaways');
+  const existingQuiz = document.querySelector('.yt-video-quiz');
+  
+  if (existingProgress) existingProgress.remove();
+  if (existingTakeaways) existingTakeaways.remove();
+  if (existingQuiz) existingQuiz.remove();
+  
+  takeawaysContainer = null;
 });
 
-// Initialize on load and navigation
+// Initialize on load and navigation finish
+function checkForVideo() {
+  if (location.href.includes('youtube.com/watch')) {
+    const videoId = new URL(location.href).searchParams.get('v');
+    console.log('[YT Captions] New video detected:', videoId);
+    
+    const video = document.querySelector('video');
+    if (video) {
+      console.log('[YT Captions] Found video element');
+      
+      // Clear previous state
+      currentTakeaways = null;
+      
+      // Setup new video tracking
+      setupVideoTracking(video);
+      
+      // Check cache and initialize
+      chrome.storage.local.get(`takeaways_${videoId}`, (result) => {
+        if (result[`takeaways_${videoId}`]) {
+          console.log('[YT Captions] Found cached takeaways');
+          currentTakeaways = result[`takeaways_${videoId}`];
+          initializeUI();
+          setTimeout(() => {
+            updateMarkers(video, currentTakeaways.takeaways);
+            updateUI(video, video.currentTime, currentTakeaways.takeaways);
+          }, 100);
+        }
+      });
+    }
+  }
+}
+
+// Initialize on page load
 checkForVideo();
-document.addEventListener('yt-navigate-finish', checkForVideo);
+
+// Handle YouTube's navigation events
+document.addEventListener('yt-navigate-finish', () => {
+  console.log('[YT Captions] Navigation finished');
+  checkForVideo();
+});
 
 function updateTakeawaysStatus(status, error = null) {
   if (!takeawaysContainer) {
@@ -739,48 +812,86 @@ function updateTakeawaysStatus(status, error = null) {
   }, 150);
 }
 
-// Update the message listener to only create UI when content is relevant
+// Update the message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    case 'PROCESSING_STATUS':
-      // Don't show any UI during processing
-      if (message.status === 'NOT_RELEVANT') {
-        // Remove UI if it exists
-        const existingProgress = document.querySelector('.yt-takeaways-progress');
-        const existingTakeaways = document.querySelector('.yt-video-takeaways');
-        if (existingProgress) existingProgress.remove();
-        if (existingTakeaways) existingTakeaways.remove();
+  if (message.type === 'PROCESSING_STATUS') {
+    const statusText = document.querySelector('.status-text');
+    if (statusText) {
+      switch (message.status) {
+        case 'LOADING_VIDEO_DETAILS':
+          statusText.textContent = 'Loading video details...';
+          break;
+        case 'CHECKING_RELEVANCE':
+          statusText.textContent = 'Checking content type...';
+          break;
+        case 'GENERATING_TAKEAWAYS':
+          statusText.textContent = 'Generating takeaways...';
+          break;
       }
-      break;
-      
-    case 'PROCESSING_ERROR':
-      // Remove UI if there's an error
-      const existingProgress = document.querySelector('.yt-takeaways-progress');
-      const existingTakeaways = document.querySelector('.yt-video-takeaways');
-      if (existingProgress) existingProgress.remove();
-      if (existingTakeaways) existingTakeaways.remove();
-      break;
-      
-    case 'VIDEO_TAKEAWAYS':
-      console.log('[YT Captions] Received takeaways:', message.takeaways);
+    }
+  } else if (message.type === 'VIDEO_TAKEAWAYS') {
+    // Clear any loading states
+    const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
+    const regenerationStatus = document.querySelector('.regeneration-status');
+    const retryButton = document.querySelector('.retry-button');
+    
+    // Remove loading UI
+    if (loadingUI) {
+      loadingUI.remove();
+    }
+    
+    // Reset regeneration status if it exists
+    if (regenerationStatus) {
+      regenerationStatus.style.display = 'none';
+    }
+    
+    // Re-enable retry button if it exists
+    if (retryButton) {
+      retryButton.style.opacity = '1';
+      retryButton.style.cursor = 'pointer';
+      retryButton.disabled = false;
+    }
+
+    // Initialize the full UI
+    initializeUI();
+    
+    // Handle the takeaways data
+    if (message.takeaways) {
       currentTakeaways = message.takeaways;
-      
-      // Cache the takeaways
-      const videoId = new URL(location.href).searchParams.get('v');
-      chrome.storage.local.set({
-        [`takeaways_${videoId}`]: message.takeaways
-      });
-      
-      // Only now create the UI since we know the content is relevant
-      initializeUI();
       const video = document.querySelector('video');
       if (video) {
-        setTimeout(() => {
-          updateMarkers(video, currentTakeaways.takeaways);
-          updateUI(video, video.currentTime, currentTakeaways.takeaways);
-        }, 100);
+        updateMarkers(video, message.takeaways.takeaways);
+        updateUI(video, video.currentTime, message.takeaways.takeaways);
       }
-      break;
+    }
+  } else if (message.type === 'PROCESSING_ERROR') {
+    // Clear loading states and show error
+    const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
+    const regenerationStatus = document.querySelector('.regeneration-status');
+    const retryButton = document.querySelector('.retry-button');
+    
+    if (regenerationStatus) {
+      regenerationStatus.style.display = 'none';
+    }
+    
+    if (retryButton) {
+      retryButton.style.opacity = '1';
+      retryButton.style.cursor = 'pointer';
+      retryButton.disabled = false;
+    }
+
+    const statusText = document.querySelector('.status-text');
+    if (statusText) {
+      statusText.textContent = message.error;
+      statusText.style.color = '#cc0000';
+    }
+
+    // Remove loading UI after showing error
+    setTimeout(() => {
+      if (loadingUI) {
+        loadingUI.remove();
+      }
+    }, 3000);
   }
 });
 
@@ -818,6 +929,10 @@ style.textContent = `
     opacity: 0;
     transform: translateY(10px);
   }
+
+  .retry-button:disabled {
+    pointer-events: none;
+  }
 `;
 document.head.appendChild(style);
 
@@ -840,4 +955,39 @@ function updateTakeawayContent(relevantTakeaways) {
       takeawayDot.style.transform = 'scale(1)';
     }
   }
+}
+
+// Add this new function to create a simplified loading state UI
+function createInitialLoadingUI() {
+  const progressIndicator = document.createElement('div');
+  progressIndicator.className = 'yt-takeaways-progress initial-loading';
+  progressIndicator.style.cssText = `
+    background: #fff;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    text-shadow: none;
+  `;
+
+  progressIndicator.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none;">
+        Takeaways
+      </div>
+      <div class="generation-status" style="display: flex; align-items: center; gap: 6px; color: #606060; font-size: 12px; font-weight: normal;">
+        <div class="generating-spinner" style="
+          width: 12px;
+          height: 12px;
+          border: 2px solid #f3f3f3;
+          border-top: 2px solid #3498db;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        "></div>
+        <span class="status-text">Analyzing video content...</span>
+      </div>
+    </div>
+  `;
+
+  return progressIndicator;
 }

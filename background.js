@@ -184,7 +184,7 @@ async function getVideoSummary(videoDetails) {
       }
 
       For the quiz:
-      - Generate exactly 5 questions
+      - Generate exactly 4 questions
       - Focus on the most practical and actionable takeaways
       - Questions should test understanding, not just memory
       - Each question should have exactly 4 options
@@ -232,6 +232,11 @@ async function getVideoSummary(videoDetails) {
         "significanceScore": 85,
         "interestScore": 90
       }
+              For takeaways:
+      - Include at least one takeaway for every 2-3 minutes of content
+      - Minimum of 5 takeaways for any video longer than 10 minutes
+      - Maximum of 20 takeaways for very long videos
+
     `;
 
     console.log('[YT Video] Sending AI request for video:', videoDetails.video.title);
@@ -256,7 +261,55 @@ async function getVideoSummary(videoDetails) {
             topK: 40,
             topP: 0.7,
             maxOutputTokens: 8192,
-            responseMimeType: "application/json"
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                duration_minutes: { type: "integer" },
+                takeaways: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      minute: { type: "integer" },
+                      key_point: { type: "string" },
+                      significanceScore: { type: "integer", minimum: 1, maximum: 100 },
+                      interestScore: { type: "integer", minimum: 1, maximum: 100 }
+                    },
+                    required: ["minute", "key_point", "significanceScore", "interestScore"]
+                  }
+                },
+                quiz: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    questions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          question: { type: "string" },
+                          options: { 
+                            type: "array",
+                            items: { type: "string" },
+                            minItems: 4,
+                            maxItems: 4
+                          },
+                          correctIndex: { type: "integer", minimum: 0, maximum: 3 },
+                          explanation: { type: "string" }
+                        },
+                        required: ["question", "options", "correctIndex", "explanation"]
+                      },
+                      minItems: 5,
+                      maxItems: 5
+                    }
+                  },
+                  required: ["description", "questions"]
+                }
+              },
+              required: ["title", "duration_minutes", "takeaways", "quiz"]
+            }
           }
         })
       }
@@ -281,10 +334,15 @@ async function getVideoSummary(videoDetails) {
     try {
       let summaryText = data.candidates[0].content.parts[0].text;
       
-      // Simplified cleanup that preserves JSON structure
+      // Enhanced cleanup that preserves JSON structure
       summaryText = summaryText
         // Remove any markdown code block markers
         .replace(/```json\s*|\s*```/g, '')
+        // Fix common JSON structural issues
+        .replace(/}\s*,\s*{/g, '}, {')  // Ensure proper array element separation
+        .replace(/}\s*{/g, '}, {')      // Fix missing commas between objects
+        .replace(/}\s*]/g, '}]')        // Fix array closing
+        .replace(/]\s*}/g, ']}')        // Fix object closing
         // Remove any leading/trailing whitespace
         .trim();
 
@@ -295,7 +353,7 @@ async function getVideoSummary(videoDetails) {
       } catch (firstParseError) {
         console.warn('[YT Video] First parse attempt failed:', firstParseError);
         
-        // Try to clean the JSON string more aggressively if needed
+        // More aggressive cleanup if needed
         try {
           summaryText = summaryText
             // Remove any potential control characters
@@ -303,7 +361,9 @@ async function getVideoSummary(videoDetails) {
             // Ensure proper line endings
             .replace(/\n/g, ' ')
             // Remove any extra spaces
-            .replace(/\s+/g, ' ');
+            .replace(/\s+/g, ' ')
+            // Fix any trailing commas in arrays/objects
+            .replace(/,\s*([}\]])/g, '$1');
             
           const summary = JSON.parse(summaryText);
           console.log('[YT Video] AI Summary parsed with cleanup:', summary);
@@ -455,58 +515,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      // If not cached, proceed with normal processing
-      chrome.tabs.sendMessage(sender.tab.id, {
-        type: 'PROCESSING_STATUS',
-        status: 'LOADING_VIDEO_DETAILS'
-      });
-      
       // Process the video
-      getVideoDetails(message).then(async result => {
-        if (result && result.captions.available) {
-          console.log('[YT Video] Video Details:', result);
-          
-          // Update status - checking relevance
-          chrome.tabs.sendMessage(sender.tab.id, {
-            type: 'PROCESSING_STATUS',
-            status: 'CHECKING_RELEVANCE'
-          });
-          
-          const isRelevant = await isRelevantContent(result);
-          
-          if (isRelevant) {
-            // Update status - generating takeaways
-            chrome.tabs.sendMessage(sender.tab.id, {
-              type: 'PROCESSING_STATUS',
-              status: 'GENERATING_TAKEAWAYS'
-            });
-            
-            const takeaways = await getVideoSummary(result);
-            if (takeaways) {
-              // Send final takeaways
-              chrome.tabs.sendMessage(sender.tab.id, {
-                type: 'VIDEO_TAKEAWAYS',
-                takeaways: takeaways
-              });
-            } else {
-              chrome.tabs.sendMessage(sender.tab.id, {
-                type: 'PROCESSING_ERROR',
-                error: 'Failed to generate takeaways'
-              });
-            }
-          } else {
-            chrome.tabs.sendMessage(sender.tab.id, {
-              type: 'PROCESSING_ERROR',
-              error: 'Content not suitable for takeaways'
-            });
-          }
-        } else {
+      try {
+        const videoDetails = await getVideoDetails(message);
+        if (!videoDetails || !videoDetails.captions.available) {
           chrome.tabs.sendMessage(sender.tab.id, {
             type: 'PROCESSING_ERROR',
             error: 'No captions available'
           });
+          return;
         }
-      });
+
+        console.log('[YT Video] Video Details:', videoDetails);
+        
+        // Show initial loading UI when checking relevance
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: 'PROCESSING_STATUS',
+          status: 'CHECKING_RELEVANCE'
+        });
+        
+        const isRelevant = await isRelevantContent(videoDetails);
+        
+        if (!isRelevant) {
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_ERROR',
+            error: 'Content not suitable for takeaways'
+          });
+          return;
+        }
+
+        // Create initial loading UI
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: sender.tab.id },
+            func: () => {
+              if (!document.querySelector('.yt-takeaways-progress')) {
+                const secondary = document.querySelector('#secondary-inner');
+                if (secondary) {
+                  secondary.insertBefore(createInitialLoadingUI(), secondary.firstChild);
+                }
+              }
+            }
+          });
+
+          // Update status - generating takeaways
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_STATUS',
+            status: 'GENERATING_TAKEAWAYS'
+          });
+          
+          const takeaways = await getVideoSummary(videoDetails);
+          if (!takeaways) {
+            throw new Error('Failed to generate takeaways');
+          }
+
+          // Cache the results
+          await chrome.storage.local.set({
+            [`takeaways_${message.videoId}`]: takeaways
+          });
+          
+          // Send final takeaways and ensure UI update
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'VIDEO_TAKEAWAYS',
+            takeaways: takeaways
+          });
+
+        } catch (error) {
+          console.error('[YT Video] Processing error:', error);
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_ERROR',
+            error: error.message || 'Failed to process video'
+          });
+        }
+      } catch (error) {
+        console.error('[YT Video] Top-level error:', error);
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: 'PROCESSING_ERROR',
+          error: 'An unexpected error occurred'
+        });
+      }
     });
 
     return true;
