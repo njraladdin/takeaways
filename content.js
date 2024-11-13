@@ -748,8 +748,9 @@ function updateTakeawayContent(relevantTakeaways) {
     // Wait longer (500ms) before updating content
     setTimeout(() => {
       // Update content while overlay is covering
-      const minute = relevantTakeaways[0].minute;
-      titleSpan.textContent = `Key Takeaway${relevantTakeaways.length > 1 ? 's' : ''} #${minute + 1}`;
+      // Find the index of this takeaway in the full takeaways array
+      const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === relevantTakeaways[0].key_point) + 1;
+      titleSpan.textContent = `Key Takeaway${relevantTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
       
       content.innerHTML = relevantTakeaways.map((takeaway, index) => `
         <div class="takeaway-item" style="
