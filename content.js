@@ -43,12 +43,12 @@ function createProgressUI() {
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <button class="play-quiz-button" style="
-          background: #0f0f0f;
+          background: #f2f2f2;
           border: none;
           cursor: pointer;
           font-size: 11px;
           padding: 1px 8px;
-          color: white;
+          color: #0f0f0f;
           display: flex;
           align-items: center;
           gap: 4px;
@@ -139,13 +139,13 @@ function createProgressUI() {
     }
   });
 
-  // Add hover effect for the play quiz button
+  // Update hover effect for the play quiz button
   const playQuizButton = progressIndicator.querySelector('.play-quiz-button');
   playQuizButton.addEventListener('mouseenter', () => {
-    playQuizButton.style.backgroundColor = '#272727';
+    playQuizButton.style.backgroundColor = '#e5e5e5';
   });
   playQuizButton.addEventListener('mouseleave', () => {
-    playQuizButton.style.backgroundColor = '#0f0f0f';
+    playQuizButton.style.backgroundColor = '#f2f2f2';
   });
 
   return progressIndicator;
@@ -414,23 +414,26 @@ function updateTakeawayVisibility(currentTime, takeaways) {
   }
 
   const currentMinute = Math.floor(currentTime / 60);
-  const secondsInMinute = currentTime % 60;
+  const secondsIntoMinute = currentTime % 60;
   
-  console.log('[YT Captions] Checking takeaways:', {
-    currentMinute,
-    secondsInMinute,
-    takeaways
-  });
-
-  // Updated to use key_point instead of text
-  const relevantTakeaways = takeaways.filter(t => { 
-    console.log('[YT Captions] Checking takeaway:', t);
-    return t.key_point && 
-           ((t.minute === currentMinute && secondsInMinute >= 30) || 
-            (t.minute === currentMinute - 1 && secondsInMinute <= 20));
-  });
-
-  console.log('[YT Captions] Relevant takeaways:', relevantTakeaways);
+  // Find all takeaways for the current minute
+  let relevantTakeaways = [];
+  
+  // Only show takeaways if we're at least 10 seconds into the minute
+  if (secondsIntoMinute >= 10) {
+    if (currentMinute === 0) {
+      // For minute 0, only show minute 0 takeaways
+      relevantTakeaways = takeaways.filter(t => t.minute === 0);
+    } else {
+      // Find the highest minute that's less than or equal to current minute
+      const lastValidMinute = Math.max(...takeaways
+        .map(t => t.minute)
+        .filter(m => m <= currentMinute));
+      
+      // Get all takeaways for that minute
+      relevantTakeaways = takeaways.filter(t => t.minute === lastValidMinute);
+    }
+  }
 
   // Update visibility
   container.style.opacity = relevantTakeaways.length ? '1' : '0';
@@ -501,7 +504,7 @@ function updateTakeawayVisibility(currentTime, takeaways) {
 // Markers Management
 function createMarker(minute, duration) {
   const markerContainer = document.createElement('div');
-  const position = (minute * 60 / duration) * 100;
+  const position = ((minute * 60 + 10) / duration) * 100;
   
   markerContainer.style.cssText = `
     position: absolute;
@@ -673,6 +676,252 @@ function checkTimeRequirements(video) {
   }
 }
 
+// Add this new function to handle the typewriter effect
+function typewriterEffect(element, text, speed = 10) {
+  let index = 0;
+  element.textContent = '';
+  
+  // Store the full text for instant display later
+  element.dataset.fullText = text;
+  
+  function type() {
+    if (index < text.length) {
+      element.textContent += text.charAt(index);
+      index++;
+      setTimeout(type, speed);
+    }
+  }
+  
+  type();
+}
+
+function updateTakeawayContent(relevantTakeaways) {
+  const content = document.querySelector('.takeaways-content');
+  const titleSpan = document.querySelector('.takeaways-title span');
+  const takeawayDot = document.querySelector('.takeaway-dot');
+  const container = document.querySelector('.yt-video-takeaways');
+  
+  if (!content || !titleSpan) return;
+
+  // Create a string of all takeaway content to check for changes
+  const newContent = relevantTakeaways.map(t => t.key_point).join('|||');
+  if (content.dataset.currentTakeaway === newContent) return;
+  
+  // Track if these takeaways are being shown for the first time
+  const isFirstShow = content.dataset.currentTakeaway === undefined || 
+                     !content.dataset.shownTakeaways?.includes(newContent);
+  
+  // Update tracking
+  content.dataset.currentTakeaway = newContent;
+  content.dataset.shownTakeaways = content.dataset.shownTakeaways 
+    ? `${content.dataset.shownTakeaways},${newContent}`
+    : newContent;
+
+  if (relevantTakeaways.length > 0) {
+    let wipeOverlay = container.querySelector('.wipe-overlay');
+    if (!wipeOverlay) {
+      wipeOverlay = document.createElement('div');
+      wipeOverlay.className = 'wipe-overlay';
+      wipeOverlay.innerHTML = `
+        <div class="wipe-overlay-content">
+          <div class="logo-container">
+            <svg class="thinking-lines" viewBox="0 0 100 100">
+              <path class="sparkle-1" d="M20,20 L22,22 M20,24 L22,22 M24,20 L22,22 M24,24 L22,22"/>
+              <path class="sparkle-2" d="M80,20 L82,22 M80,24 L82,22 M84,20 L82,22 M84,24 L82,22"/>
+              <path class="sparkle-3" d="M20,80 L22,82 M20,84 L22,82 M24,80 L22,82 M24,84 L22,82"/>
+              <path class="sparkle-4" d="M80,80 L82,82 M80,84 L82,82 M84,80 L82,82 M84,84 L82,82"/>
+              <path class="sparkle-5" d="M50,10 L52,12 M50,14 L52,12 M54,10 L52,12 M54,14 L52,12"/>
+              <path class="sparkle-6" d="M50,90 L52,92 M50,94 L52,92 M54,90 L52,92 M54,94 L52,92"/>
+            </svg>
+            <img src="${chrome.runtime.getURL('icons/icon48.png')}" 
+                 class="wipe-overlay-logo" 
+                 alt="Logo">
+          </div>
+        </div>
+      `;
+      container.appendChild(wipeOverlay);
+    }
+
+    // Start wipe-in transition
+    wipeOverlay.style.transform = 'scaleX(1)';
+    
+    // Wait longer (500ms) before updating content
+    setTimeout(() => {
+      // Update content while overlay is covering
+      const minute = relevantTakeaways[0].minute;
+      titleSpan.textContent = `Key Takeaway${relevantTakeaways.length > 1 ? 's' : ''} #${minute + 1}`;
+      
+      content.innerHTML = relevantTakeaways.map((takeaway, index) => `
+        <div class="takeaway-item" style="
+          padding: ${index === 0 ? '8px 0 4px 0' : '4px 0 8px 0'}; 
+          text-shadow: none;
+          ${index > 0 ? 'border-top: 1px solid rgba(0,0,0,0.1);' : ''}
+        ">
+          <span class="takeaway-text"></span>
+        </div>
+      `).join('');
+      
+      const textElements = content.querySelectorAll('.takeaway-text');
+      
+      // Flash the dot
+      if (takeawayDot) {
+        takeawayDot.style.transform = 'scale(1.5)';
+        setTimeout(() => {
+          takeawayDot.style.transform = 'scale(1)';
+        }, 300);
+      }
+
+      // Start wipe-out transition after a longer delay (800ms)
+      setTimeout(() => {
+        wipeOverlay.style.transform = 'scaleX(0)';
+      }, 800);
+
+      // Delay the typewriter effect to account for longer overlay
+      textElements.forEach((element, index) => {
+        if (isFirstShow) {
+          setTimeout(() => {
+            typewriterEffect(element, relevantTakeaways[index].key_point);
+          }, index * 1000 + 1100); // Increased delay to account for longer overlay
+        } else {
+          element.textContent = relevantTakeaways[index].key_point;
+        }
+      });
+    }, 500); // Increased delay before content update
+  }
+}
+
+// Updated styles with Apple-like aesthetics
+const wipeTransitionStyles = `
+  .yt-video-takeaways {
+    position: relative;
+    overflow: hidden;
+    min-height: 100px;
+  }
+
+  .wipe-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.5s cubic-bezier(0.645, 0.045, 0.355, 1);
+    z-index: 1;
+  }
+
+  .wipe-overlay-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-container {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .thinking-lines {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .thinking-lines path {
+    fill: none;
+    stroke: #A259FF;
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0;
+    transform-origin: center;
+  }
+
+  .wipe-overlay[style*="scaleX(1)"] .thinking-lines {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .wipe-overlay[style*="scaleX(1)"] .thinking-lines path {
+    opacity: 1;
+    animation: sparkle 1.5s ease-in-out infinite;
+  }
+
+  .thinking-lines .sparkle-2 { animation-delay: 0.2s !important; }
+  .thinking-lines .sparkle-3 { animation-delay: 0.4s !important; }
+  .thinking-lines .sparkle-4 { animation-delay: 0.1s !important; }
+  .thinking-lines .sparkle-5 { animation-delay: 0.3s !important; }
+  .thinking-lines .sparkle-6 { animation-delay: 0.5s !important; }
+
+  .wipe-overlay-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    opacity: 0;
+    transform: scale(0.8) rotate(-10deg);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1;
+  }
+
+  .wipe-overlay[style*="scaleX(1)"] .wipe-overlay-logo {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    animation: logoWiggle 1s cubic-bezier(0.4, 0, 0.2, 1) 0.2s;
+  }
+
+  @keyframes logoWiggle {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    25% { transform: scale(1.1) rotate(5deg); }
+    50% { transform: scale(1.1) rotate(-5deg); }
+    75% { transform: scale(1.1) rotate(3deg); }
+  }
+
+  @keyframes sparkle {
+    0%, 100% {
+      opacity: 0;
+      transform: scale(0.3) rotate(0deg);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1) rotate(180deg);
+    }
+  }
+
+  .takeaways-content {
+    min-height: 60px;
+    position: relative;
+  }
+`;
+
+// Add the new styles to the existing style element
+document.querySelector('style').textContent += wipeTransitionStyles;
+
+// Add event listener for video seeking
+function setupVideoSeekListener(video) {
+  video.addEventListener('seeking', () => {
+    const textElement = document.querySelector('.takeaway-text');
+    if (textElement && textElement.dataset.fullText) {
+      // Show full text immediately when seeking
+      textElement.textContent = textElement.dataset.fullText;
+    }
+  });
+}
+
+// Update your existing video setup code to include the seek listener
 function setupVideoTracking(video) {
   videoPlaybackTime = 0;
   
@@ -692,6 +941,8 @@ function setupVideoTracking(video) {
       updateMarkers(video, currentTakeaways.takeaways);
     }
   });
+  
+  setupVideoSeekListener(video);
 }
 
 function checkForVideo() {
@@ -940,59 +1191,13 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-function updateTakeawayContent(relevantTakeaways) {
-  const content = document.querySelector('.takeaways-content');
-  const titleSpan = document.querySelector('.takeaways-title span');
-  const takeawayDot = document.querySelector('.takeaway-dot');
-  
-  if (!content || !titleSpan) return;
-
-  const takeaway = relevantTakeaways[0];
-  if (takeaway?.key_point) {
-    // Update the title to include the takeaway number
-    titleSpan.textContent = `Key Takeaway #${takeaway.minute + 1}`; // Add 1 since minutes start at 0
-    content.innerHTML = `<div style="padding: 8px 0; text-shadow: none;">${takeaway.key_point}</div>`;
-    
-    // Ensure dot is visible
-    if (takeawayDot) {
-      takeawayDot.style.opacity = '1';
-      takeawayDot.style.transform = 'scale(1)';
-    }
+// Add these additional styles
+const additionalStyles = `
+  .takeaway-text {
+    display: inline-block;
+    white-space: pre-wrap;
   }
-}
+`;
 
-// Add this new function to create a simplified loading state UI
-function createInitialLoadingUI() {
-  const progressIndicator = document.createElement('div');
-  progressIndicator.className = 'yt-takeaways-progress initial-loading';
-  progressIndicator.style.cssText = `
-    background: #fff;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    padding: 12px 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    text-shadow: none;
-  `;
-
-  progressIndicator.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
-      <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none;">
-        Takeaways
-      </div>
-      <div class="generation-status" style="display: flex; align-items: center; gap: 6px; color: #606060; font-size: 12px; font-weight: normal;">
-        <div class="generating-spinner" style="
-          width: 12px;
-          height: 12px;
-          border: 2px solid #f3f3f3;
-          border-top: 2px solid #3498db;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        "></div>
-        <span class="status-text">Analyzing video content...</span>
-      </div>
-    </div>
-  `;
-
-  return progressIndicator;
-}
+// Add the new styles to the existing style element
+document.querySelector('style').textContent += additionalStyles;
