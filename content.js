@@ -419,19 +419,24 @@ function updateTakeawayVisibility(currentTime, takeaways) {
   // Find all takeaways for the current minute
   let relevantTakeaways = [];
   
-  // Only show takeaways if we're at least 10 seconds into the minute
-  if (secondsIntoMinute >= 10) {
-    if (currentMinute === 0) {
-      // For minute 0, only show minute 0 takeaways
-      relevantTakeaways = takeaways.filter(t => t.minute === 0);
-    } else {
-      // Find the highest minute that's less than or equal to current minute
-      const lastValidMinute = Math.max(...takeaways
-        .map(t => t.minute)
-        .filter(m => m <= currentMinute));
-      
+  // Find the highest minute that's less than or equal to current minute
+  const validMinutes = takeaways
+    .map(t => t.minute)
+    .filter(m => m <= currentMinute);
+  
+  if (validMinutes.length > 0) {
+    const lastValidMinute = Math.max(...validMinutes);
+    
+    // Only show takeaways after 10 seconds into the minute
+    if (secondsIntoMinute >= 10 || lastValidMinute < currentMinute) {
       // Get all takeaways for that minute
       relevantTakeaways = takeaways.filter(t => t.minute === lastValidMinute);
+    } else if (lastValidMinute < currentMinute) {
+      // If we're in a new minute but before 10 seconds, show previous minute's takeaways
+      const previousValidMinute = Math.max(...validMinutes.filter(m => m < currentMinute));
+      if (previousValidMinute >= 0) {
+        relevantTakeaways = takeaways.filter(t => t.minute === previousValidMinute);
+      }
     }
   }
 
