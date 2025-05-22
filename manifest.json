@@ -37,7 +37,7 @@
     }
   },
   "web_accessible_resources": [{
-    "resources": ["icons/*"],
+    "resources": ["icons/*", "css/content.css", "html/takeaways.html"],
     "matches": ["https://*.youtube.com/*"]
   }]
 }

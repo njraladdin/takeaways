@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube Takeaways UI</title>
+  <!-- The CSS will be injected by the content script -->
+</head>
+<body>
+  <!-- Progress Bar UI -->
+  <div class="yt-takeaways-progress">
+    <div class="yt-progress-header">
+      <div class="yt-progress-title">
+        <img src="__ICON_48__" class="yt-progress-logo" alt="Logo">
+        Takeaways
+        <div class="regeneration-status" style="display:none;">
+          <div class="regenerating-spinner"></div>
+          <span>Regenerating...</span>
+        </div>
+      </div>
+      <div class="yt-progress-actions">
+        <button class="play-quiz-button">
+          <svg class="yt-quiz-icon" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          Play Quiz
+          <div class="yt-tooltip">Test your knowledge</div>
+        </button>
+        <button class="retry-button">↻<div class="yt-tooltip">Regenerate takeaways</div></button>
+        <div class="current-time">0:00</div>
+      </div>
+    </div>
+    <div class="yt-progress-bar-container">
+      <div class="video-progress"></div>
+      <div class="markers-container"></div>
+    </div>
+  </div>
+
+  <!-- Takeaways Card -->
+  <div class="yt-video-takeaways">
+    <div class="takeaways-header">
+      <div class="takeaways-title">
+        <div class="takeaways-title-inner">
+          <div class="takeaway-dot"></div>
+          <span>Key Takeaway</span>
+        </div>
+      </div>
+    </div>
+    <div class="takeaways-content"></div>
+  </div>
+
+  <!-- Quiz Card -->
+  <div class="yt-video-quiz" style="display:none;">
+    <div class="quiz-header">
+      <div>
+        <img src="__ICON_48__" class="yt-quiz-logo" alt="Logo">
+        Knowledge Check
+      </div>
+    </div>
+    <div class="quiz-content"></div>
+  </div>
+</body>
+</html> 

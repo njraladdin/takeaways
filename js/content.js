@@ -11,6 +11,8 @@ let videoTimeUpdateListener = null;
 let currentTakeaways = null;
 let takeawaysContainer = null;
 
+let isInjectingUI = false;
+
 // At the top of the file, inject the content CSS if not already present
 (function injectContentCSS() {
   if (!document.getElementById('yt-takeaways-content-css')) {
@@ -24,228 +26,6 @@ let takeawaysContainer = null;
 })();
 
 // UI Component Creation
-function createProgressUI() {
-  const progressIndicator = document.createElement('div');
-  progressIndicator.className = 'yt-takeaways-progress';
-
-  progressIndicator.innerHTML = `
-    <div class="yt-progress-header">
-      <div class="yt-progress-title">
-        <img src="${chrome.runtime.getURL('icons/icon48.png')}" class="yt-progress-logo" alt="Logo">
-        Takeaways
-        <div class="regeneration-status">
-          <div class="regenerating-spinner"></div>
-          <span>Regenerating...</span>
-        </div>
-      </div>
-      <div class="yt-progress-actions">
-        <button class="play-quiz-button">
-          <svg class="yt-quiz-icon" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-          Play Quiz
-          <div class="yt-tooltip">Test your knowledge</div>
-        </button>
-        <button class="retry-button">↻<div class="yt-tooltip">Regenerate takeaways</div></button>
-        <div class="current-time">0:00</div>
-      </div>
-    </div>
-    <div class="yt-progress-bar-container">
-      <div class="video-progress"></div>
-      <div class="markers-container"></div>
-    </div>
-  `;
-
-  // Add hover events for both buttons' tooltips
-  const buttons = progressIndicator.querySelectorAll('.play-quiz-button, .retry-button');
-  buttons.forEach(button => {
-    const tooltip = button.querySelector('.yt-tooltip');
-    button.addEventListener('mouseenter', () => {
-      tooltip.style.opacity = '1';
-      tooltip.style.visibility = 'visible';
-    });
-    button.addEventListener('mouseleave', () => {
-      tooltip.style.opacity = '0';
-      tooltip.style.visibility = 'hidden';
-    });
-  });
-
-  // Add click handlers
-  progressIndicator.querySelector('.retry-button').addEventListener('click', handleRetry);
-  progressIndicator.querySelector('.play-quiz-button').addEventListener('click', () => {
-    const quizCard = document.querySelector('.yt-video-quiz');
-    if (quizCard && currentTakeaways?.quiz) {
-      quizCard.style.display = 'block';
-      initializeQuiz(currentTakeaways.quiz);
-    }
-  });
-
-  // Update hover effect for the play quiz button
-  const playQuizButton = progressIndicator.querySelector('.play-quiz-button');
-  playQuizButton.addEventListener('mouseenter', () => {
-    playQuizButton.style.backgroundColor = '#e5e5e5';
-  });
-  playQuizButton.addEventListener('mouseleave', () => {
-    playQuizButton.style.backgroundColor = '#f2f2f2';
-  });
-
-  return progressIndicator;
-}
-
-function createTakeawaysCard() {
-  const card = document.createElement('div');
-  card.className = 'yt-video-takeaways';
-  card.innerHTML = `
-    <div class="takeaways-header">
-      <div class="takeaways-title">
-        <div class="takeaways-title-inner">
-          <div class="takeaway-dot"></div>
-          <span>Key Takeaway</span>
-        </div>
-      </div>
-    </div>
-    <div class="takeaways-content"></div>
-  `;
-  return card;
-}
-
-// Add these new functions after the existing UI component creation functions
-
-function createQuizCard() {
-  const card = document.createElement('div');
-  card.className = 'yt-video-quiz';
-  card.innerHTML = `
-    <div class="quiz-header">
-      <div>
-        <img src="${chrome.runtime.getURL('icons/icon48.png')}" class="yt-quiz-logo" alt="Logo">
-        Knowledge Check
-      </div>
-    </div>
-    <div class="quiz-content"></div>
-  `;
-  return card;
-}
-
-function renderQuizQuestion(question, index, total) {
-  return `
-    <div class="quiz-question" data-question="${index}">
-      <div class="quiz-question-meta">Question ${index + 1} of ${total}</div>
-      <div class="quiz-question-title">${question.question}</div>
-      <div class="quiz-options">
-        ${question.options.map((option, optIndex) => `
-          <button class="quiz-option" data-index="${optIndex}">${option}</button>
-        `).join('')}
-      </div>
-      <div class="question-feedback"></div>
-      <div class="question-navigation">
-        ${index > 0 ? `
-          <button class="prev-question">Previous</button>
-        ` : '<div></div>'}
-        <button class="next-question">${index === total - 1 ? 'Finish Quiz' : 'Next Question'}</button>
-      </div>
-    </div>
-  `;
-}
-
-function showQuizResults(score, total) {
-  const quizContent = document.querySelector('.quiz-content');
-  if (!quizContent) return;
-  const percentage = (score / total) * 100;
-  const resultMessage = percentage >= 80 ? 'Great job!' : 'Keep learning!';
-  quizContent.innerHTML = `
-    <div class="quiz-results">
-      <div class="quiz-results-title">${resultMessage}</div>
-      <div class="quiz-results-score">You scored ${score} out of ${total}</div>
-      <button class="retry-quiz-button">Try Again</button>
-    </div>
-  `;
-  const retryButton = quizContent.querySelector('.retry-quiz-button');
-  retryButton.addEventListener('click', () => initializeQuiz(currentTakeaways.quiz));
-}
-
-function initializeQuiz(quizData) {
-  const quizContent = document.querySelector('.quiz-content');
-  if (!quizContent) return;
-
-  let currentQuestion = 0;
-  let score = 0;
-
-  // Render all questions (hidden initially)
-  quizContent.innerHTML = quizData.questions.map((q, i) => 
-    renderQuizQuestion(q, i, quizData.questions.length)
-  ).join('');
-
-  // Show first question
-  const firstQuestion = quizContent.querySelector('[data-question="0"]');
-  if (firstQuestion) firstQuestion.style.display = 'block';
-
-  // Add event listeners for options
-  quizContent.addEventListener('click', (e) => {
-    const option = e.target.closest('.quiz-option');
-    if (!option) return;
-
-    const questionEl = option.closest('.quiz-question');
-    const questionIndex = parseInt(questionEl.dataset.question);
-    const optionIndex = parseInt(option.dataset.index);
-    const question = quizData.questions[questionIndex];
-    const feedback = questionEl.querySelector('.question-feedback');
-    const nextButton = questionEl.querySelector('.next-question');
-
-    // Disable all options
-    questionEl.querySelectorAll('.quiz-option').forEach(opt => {
-      opt.style.pointerEvents = 'none';
-    });
-
-    // Show correct/incorrect styling
-    if (optionIndex === question.correctIndex) {
-      option.style.backgroundColor = '#e6f4ea';
-      option.style.borderColor = '#34a853';
-      feedback.style.backgroundColor = '#e6f4ea';
-      feedback.style.color = '#137333';
-      score++;
-    } else {
-      option.style.backgroundColor = '#fce8e6';
-      option.style.borderColor = '#ea4335';
-      feedback.style.backgroundColor = '#fce8e6';
-      feedback.style.color = '#c5221f';
-      
-      // Highlight correct answer
-      const correctOption = questionEl.querySelector(`[data-index="${question.correctIndex}"]`);
-      if (correctOption) {
-        correctOption.style.backgroundColor = '#e6f4ea';
-        correctOption.style.borderColor = '#34a853';
-      }
-    }
-
-    // Show feedback and next button
-    feedback.textContent = question.explanation;
-    feedback.style.display = 'block';
-    nextButton.style.display = 'block';
-  });
-
-  // Add navigation listeners
-  quizContent.addEventListener('click', (e) => {
-    if (e.target.matches('.next-question')) {
-      const currentQuestionEl = quizContent.querySelector(`[data-question="${currentQuestion}"]`);
-      currentQuestionEl.style.display = 'none';
-      
-      currentQuestion++;
-      if (currentQuestion < quizData.questions.length) {
-        const nextQuestionEl = quizContent.querySelector(`[data-question="${currentQuestion}"]`);
-        nextQuestionEl.style.display = 'block';
-      } else {
-        showQuizResults(score, quizData.questions.length);
-      }
-    } else if (e.target.matches('.prev-question')) {
-      const currentQuestionEl = quizContent.querySelector(`[data-question="${currentQuestion}"]`);
-      currentQuestionEl.style.display = 'none';
-      
-      currentQuestion--;
-      const prevQuestionEl = quizContent.querySelector(`[data-question="${currentQuestion}"]`);
-      prevQuestionEl.style.display = 'block';
-    }
-  });
-}
 
 // UI Updates
 function updateProgressBar(video, currentTime) {
@@ -484,32 +264,90 @@ function handleRetry() {
   }
 }
 
-// Initialize UI
-function initializeUI() {
-  const secondary = document.querySelector('#secondary-inner');
-  if (!secondary) return;
+// Refactored initializeUI to inject HTML from html/takeaways.html
+async function initializeUI() {
+  if (isInjectingUI) return;
+  isInjectingUI = true;
+  try {
+    const secondary = document.querySelector('#secondary-inner');
+    if (!secondary) {
+      isInjectingUI = false;
+      return;
+    }
 
-  // Remove existing UI
-  const existingProgress = document.querySelector('.yt-takeaways-progress');
-  const existingTakeaways = document.querySelector('.yt-video-takeaways');
-  const existingQuiz = document.querySelector('.yt-video-quiz');
-  if (existingProgress) existingProgress.remove();
-  if (existingTakeaways) existingTakeaways.remove();
-  if (existingQuiz) existingQuiz.remove();
+    // Remove ALL existing UI (in case there are multiple)
+    document.querySelectorAll('.yt-takeaways-progress').forEach(el => el.remove());
+    document.querySelectorAll('.yt-video-takeaways').forEach(el => el.remove());
+    document.querySelectorAll('.yt-video-quiz').forEach(el => el.remove());
 
-  const progressUI = createProgressUI();
-  const takeawaysCard = createTakeawaysCard();
-  const quizCard = createQuizCard();
-  
-  secondary.insertBefore(progressUI, secondary.firstChild);
-  secondary.insertBefore(takeawaysCard, progressUI.nextSibling);
-  secondary.insertBefore(quizCard, takeawaysCard.nextSibling);
+    // Fetch and inject the HTML
+    const htmlUrl = chrome.runtime.getURL('html/takeaways.html');
+    const response = await fetch(htmlUrl);
+    const htmlText = await response.text();
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlText;
 
-  takeawaysContainer = takeawaysCard;
+    // Extract the relevant elements
+    const progressUI = tempDiv.querySelector('.yt-takeaways-progress');
+    const takeawaysCard = tempDiv.querySelector('.yt-video-takeaways');
+    const quizCard = tempDiv.querySelector('.yt-video-quiz');
 
-  if (currentTakeaways) {
-    const video = document.querySelector('video');
-    updateMarkers(video, currentTakeaways.takeaways);
+    // Insert into the DOM
+    secondary.insertBefore(progressUI, secondary.firstChild);
+    secondary.insertBefore(takeawaysCard, progressUI.nextSibling);
+    secondary.insertBefore(quizCard, takeawaysCard.nextSibling);
+
+    // Replace icon placeholders with extension URLs
+    [progressUI, takeawaysCard, quizCard].forEach(card => {
+      card.querySelectorAll('img[src="__ICON_48__"]').forEach(img => {
+        img.src = chrome.runtime.getURL('icons/icon48.png');
+      });
+    });
+
+    takeawaysContainer = takeawaysCard;
+
+    // Attach event listeners (retry, play quiz, tooltips, etc.)
+    // Tooltips for buttons
+    const buttons = progressUI.querySelectorAll('.play-quiz-button, .retry-button');
+    buttons.forEach(button => {
+      const tooltip = button.querySelector('.yt-tooltip');
+      button.addEventListener('mouseenter', () => {
+        tooltip.style.opacity = '1';
+        tooltip.style.visibility = 'visible';
+      });
+      button.addEventListener('mouseleave', () => {
+        tooltip.style.opacity = '0';
+        tooltip.style.visibility = 'hidden';
+      });
+    });
+
+    // Retry button
+    progressUI.querySelector('.retry-button').addEventListener('click', handleRetry);
+
+    // Play quiz button
+    progressUI.querySelector('.play-quiz-button').addEventListener('click', () => {
+      const quizCard = document.querySelector('.yt-video-quiz');
+      if (quizCard && currentTakeaways?.quiz) {
+        quizCard.style.display = 'block';
+        initializeQuiz(currentTakeaways.quiz);
+      }
+    });
+
+    // Hover effect for play quiz button
+    const playQuizButton = progressUI.querySelector('.play-quiz-button');
+    playQuizButton.addEventListener('mouseenter', () => {
+      playQuizButton.style.backgroundColor = '#e5e5e5';
+    });
+    playQuizButton.addEventListener('mouseleave', () => {
+      playQuizButton.style.backgroundColor = '#f2f2f2';
+    });
+
+    if (currentTakeaways) {
+      const video = document.querySelector('video');
+      updateMarkers(video, currentTakeaways.takeaways);
+    }
+  } finally {
+    isInjectingUI = false;
   }
 }
 
@@ -738,45 +576,42 @@ document.addEventListener('yt-navigate-start', () => {
   takeawaysContainer = null;
 });
 
-// Initialize on load and navigation finish
-function checkForVideo() {
-  if (location.href.includes('youtube.com/watch')) {
-    const videoId = new URL(location.href).searchParams.get('v');
-    console.log('[YT Captions] New video detected:', videoId);
-    
-    const video = document.querySelector('video');
-    if (video) {
-      console.log('[YT Captions] Found video element');
-      
-      // Clear previous state
-      currentTakeaways = null;
-      
-      // Setup new video tracking
-      setupVideoTracking(video);
-      
-      // Check cache and initialize
-      chrome.storage.local.get(`takeaways_${videoId}`, (result) => {
-        if (result[`takeaways_${videoId}`]) {
-          console.log('[YT Captions] Found cached takeaways');
-          currentTakeaways = result[`takeaways_${videoId}`];
-          initializeUI();
-          setTimeout(() => {
-            updateMarkers(video, currentTakeaways.takeaways);
-            updateUI(video, video.currentTime, currentTakeaways.takeaways);
-          }, 100);
-        }
-      });
-    }
+// Utility: Wait for #secondary-inner to exist
+function waitForSecondaryInner(callback) {
+  const secondary = document.querySelector('#secondary-inner');
+  if (secondary) {
+    callback();
+    return;
   }
+  const observer = new MutationObserver(() => {
+    const secondaryNow = document.querySelector('#secondary-inner');
+    if (secondaryNow) {
+      observer.disconnect();
+      callback();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // Initialize on page load
-checkForVideo();
+if (location.href.includes('youtube.com/watch')) {
+  waitForSecondaryInner(() => {
+    initializeUI();
+    updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+    checkForVideo();
+  });
+}
 
 // Handle YouTube's navigation events
 document.addEventListener('yt-navigate-finish', () => {
   console.log('[YT Captions] Navigation finished');
-  checkForVideo();
+  if (location.href.includes('youtube.com/watch')) {
+    waitForSecondaryInner(() => {
+      initializeUI();
+      updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+      checkForVideo();
+    });
+  }
 });
 
 function updateTakeawaysStatus(status, error = null) {
@@ -793,6 +628,8 @@ function updateTakeawaysStatus(status, error = null) {
   }
   
   const statusMessages = {
+    LOADING_VIDEO_DETAILS: 'Loading video details...',
+    CHECKING_RELEVANCE: 'Checking content type...',
     NOT_RELEVANT: 'This content is not suitable for generating takeaways.',
     GENERATING: 'Generating takeaways...',
     ERROR: error || 'An error occurred'
@@ -815,19 +652,16 @@ function updateTakeawaysStatus(status, error = null) {
 // Update the message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PROCESSING_STATUS') {
-    const statusText = document.querySelector('.status-text');
-    if (statusText) {
-      switch (message.status) {
-        case 'LOADING_VIDEO_DETAILS':
-          statusText.textContent = 'Loading video details...';
-          break;
-        case 'CHECKING_RELEVANCE':
-          statusText.textContent = 'Checking content type...';
-          break;
-        case 'GENERATING_TAKEAWAYS':
-          statusText.textContent = 'Generating takeaways...';
-          break;
-      }
+    switch (message.status) {
+      case 'LOADING_VIDEO_DETAILS':
+        updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+        break;
+      case 'CHECKING_RELEVANCE':
+        updateTakeawaysStatus('CHECKING_RELEVANCE');
+        break;
+      case 'GENERATING_TAKEAWAYS':
+        updateTakeawaysStatus('GENERATING');
+        break;
     }
   } else if (message.type === 'VIDEO_TAKEAWAYS') {
     // Clear any loading states
@@ -880,11 +714,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       retryButton.disabled = false;
     }
 
-    const statusText = document.querySelector('.status-text');
-    if (statusText) {
-      statusText.textContent = message.error;
-      statusText.style.color = '#cc0000';
-    }
+    updateTakeawaysStatus('ERROR', message.error);
 
     // Remove loading UI after showing error
     setTimeout(() => {
