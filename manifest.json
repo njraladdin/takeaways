@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Takeaways - AI Notes & Quiz for YouTube",
-  "version": "1.0",
+  "name": "Takeaways - AI Notes & Quiz for YouTube podcasts and videos",
+  "version": "1.0.1",
   "description": "Generate notes and quizzes while watching YouTube videos. For educational content, podcasts, and interviews - powered by Gemini AI.",
   "icons": {
     "16": "icons/icon16.png",
@@ -17,18 +17,18 @@
     "*://*.youtube.com/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "js/background.js"
   },
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["js/content.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_title": "YouTube Takeaways",
-    "default_popup": "popup.html",
+    "default_popup": "html/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

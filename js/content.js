@@ -11,107 +11,48 @@ let videoTimeUpdateListener = null;
 let currentTakeaways = null;
 let takeawaysContainer = null;
 
+// At the top of the file, inject the content CSS if not already present
+(function injectContentCSS() {
+  if (!document.getElementById('yt-takeaways-content-css')) {
+    const link = document.createElement('link');
+    link.id = 'yt-takeaways-content-css';
+    link.rel = 'stylesheet';
+    link.type = 'text/css';
+    link.href = chrome.runtime.getURL('css/content.css');
+    document.head.appendChild(link);
+  }
+})();
+
 // UI Component Creation
 function createProgressUI() {
   const progressIndicator = document.createElement('div');
   progressIndicator.className = 'yt-takeaways-progress';
-  progressIndicator.style.cssText = `
-    background: #fff;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    padding: 12px 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    text-shadow: none;
-  `;
 
   progressIndicator.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-      <div style="font-size: 14px; font-weight: 500; color: #0f0f0f; text-shadow: none; display: flex; align-items: center; gap: 8px;">
-        <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
+    <div class="yt-progress-header">
+      <div class="yt-progress-title">
+        <img src="${chrome.runtime.getURL('icons/icon48.png')}" class="yt-progress-logo" alt="Logo">
         Takeaways
-        <div class="regeneration-status" style="display: none; align-items: center; gap: 6px; color: #606060; font-size: 12px; font-weight: normal;">
-          <div class="regenerating-spinner" style="
-            width: 12px;
-            height: 12px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          "></div>
+        <div class="regeneration-status">
+          <div class="regenerating-spinner"></div>
           <span>Regenerating...</span>
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <button class="play-quiz-button" style="
-          background: #f2f2f2;
-          border: none;
-          cursor: pointer;
-          font-size: 11px;
-          padding: 1px 8px;
-          color: #0f0f0f;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          border-radius: 10px;
-          text-shadow: none;
-          position: relative;
-          font-weight: 500;
-          height: 20px;
-          transition: background-color 0.2s;
-          line-height: 1;
-        ">
-          <svg style="width: 12px; height: 12px; fill: currentColor;" viewBox="0 0 24 24">
+      <div class="yt-progress-actions">
+        <button class="play-quiz-button">
+          <svg class="yt-quiz-icon" viewBox="0 0 24 24">
             <path d="M8 5v14l11-7z"/>
           </svg>
           Play Quiz
-          <div class="yt-tooltip" style="
-            position: absolute;
-            background: rgba(28, 28, 28, 0.9);
-            color: white;
-            padding: 8px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            margin-bottom: 8px;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s, visibility 0.2s;
-            pointer-events: none;
-            text-shadow: none;
-          ">
-            Test your knowledge
-          </div>
+          <div class="yt-tooltip">Test your knowledge</div>
         </button>
-        <button class="retry-button" style="background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; color: #606060; border-radius: 50%; text-shadow: none; position: relative;">
-          ↻
-          <div class="yt-tooltip" style="
-            position: absolute;
-            background: rgba(28, 28, 28, 0.9);
-            color: white;
-            padding: 8px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            margin-bottom: 8px;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.2s, visibility 0.2s;
-            pointer-events: none;
-            text-shadow: none;
-          ">Regenerate takeaways</div>
-        </button>
-        <div class="current-time" style="font-size: 13px; color: #606060; text-shadow: none; display: none;">0:00</div>
+        <button class="retry-button">↻<div class="yt-tooltip">Regenerate takeaways</div></button>
+        <div class="current-time">0:00</div>
       </div>
     </div>
-    <div style="position: relative; height: 2px; background: #e5e5e5; border-radius: 1px; overflow: visible;">
-      <div class="video-progress" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: rgba(6, 95, 212, 0.3); border-radius: 1px; z-index: 1;"></div>
-      <div class="markers-container" style="position: absolute; top: -4px; left: 0; right: 0; height: 10px; z-index: 2;"></div>
+    <div class="yt-progress-bar-container">
+      <div class="video-progress"></div>
+      <div class="markers-container"></div>
     </div>
   `;
 
@@ -154,38 +95,17 @@ function createProgressUI() {
 function createTakeawaysCard() {
   const card = document.createElement('div');
   card.className = 'yt-video-takeaways';
-  card.style.cssText = `
-    background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    opacity: 0;
-    transform: translateY(10px);
-    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-    text-shadow: none;
-  `;
-
   card.innerHTML = `
-    <div class="takeaways-header" style="font-size: 16px; font-weight: 500; margin-bottom: 12px; color: #030303; display: flex; justify-content: space-between; align-items: center; text-shadow: none;">
-      <div class="takeaways-title" style="display: flex; align-items: center; gap: 8px; text-shadow: none;">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <div class="takeaway-dot" style="
-            width: 10px;
-            height: 10px;
-            background-color: #ff0000;
-            border-radius: 50%;
-            display: inline-block;
-            opacity: 0;
-            transform: scale(0);
-            transition: opacity 0.3s, transform 0.3s;
-          "></div>
-          <span style="text-shadow: none;">Key Takeaway</span>
+    <div class="takeaways-header">
+      <div class="takeaways-title">
+        <div class="takeaways-title-inner">
+          <div class="takeaway-dot"></div>
+          <span>Key Takeaway</span>
         </div>
       </div>
     </div>
-    <div class="takeaways-content" style="font-size: 14px; color: #606060; text-shadow: none;"></div>
+    <div class="takeaways-content"></div>
   `;
-
   return card;
 }
 
@@ -194,83 +114,34 @@ function createTakeawaysCard() {
 function createQuizCard() {
   const card = document.createElement('div');
   card.className = 'yt-video-quiz';
-  card.style.cssText = `
-    background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    margin-top: 12px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    display: none;
-    text-shadow: none;
-  `;
-
   card.innerHTML = `
-    <div class="quiz-header" style="margin-bottom: 16px; text-shadow: none;">
-      <div style="font-size: 16px; font-weight: 500; color: #030303; text-shadow: none; display: flex; align-items: center; gap: 8px;">
-        <img src="${chrome.runtime.getURL('icons/icon48.png')}" style="width: 18px; height: 18px; border-radius: 4px;" alt="Logo">
+    <div class="quiz-header">
+      <div>
+        <img src="${chrome.runtime.getURL('icons/icon48.png')}" class="yt-quiz-logo" alt="Logo">
         Knowledge Check
       </div>
     </div>
-    <div class="quiz-content" style="text-shadow: none;"></div>
+    <div class="quiz-content"></div>
   `;
-
   return card;
 }
 
 function renderQuizQuestion(question, index, total) {
   return `
-    <div class="quiz-question" style="display: none; text-shadow: none;" data-question="${index}">
-      <div style="font-size: 14px; color: #606060; margin-bottom: 8px; text-shadow: none;">Question ${index + 1} of ${total}</div>
-      <div style="font-size: 15px; color: #030303; margin-bottom: 16px; text-shadow: none;">${question.question}</div>
-      <div class="quiz-options" style="display: flex; flex-direction: column; gap: 8px; text-shadow: none;">
+    <div class="quiz-question" data-question="${index}">
+      <div class="quiz-question-meta">Question ${index + 1} of ${total}</div>
+      <div class="quiz-question-title">${question.question}</div>
+      <div class="quiz-options">
         ${question.options.map((option, optIndex) => `
-          <button class="quiz-option" data-index="${optIndex}" style="
-            background: #f8f8f8;
-            border: 1px solid #e5e5e5;
-            padding: 12px;
-            border-radius: 8px;
-            text-align: left;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-            text-shadow: none;
-          ">${option}</button>
+          <button class="quiz-option" data-index="${optIndex}">${option}</button>
         `).join('')}
       </div>
-      <div class="question-feedback" style="
-        margin-top: 16px;
-        padding: 12px;
-        border-radius: 8px;
-        font-size: 14px;
-        display: none;
-        text-shadow: none;
-      "></div>
-      <div class="question-navigation" style="
-        display: flex;
-        justify-content: space-between;
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid #e5e5e5;
-      ">
+      <div class="question-feedback"></div>
+      <div class="question-navigation">
         ${index > 0 ? `
-          <button class="prev-question" style="
-            background: none;
-            border: none;
-            color: #065fd4;
-            cursor: pointer;
-            font-size: 14px;
-          ">Previous</button>
+          <button class="prev-question">Previous</button>
         ` : '<div></div>'}
-        <button class="next-question" style="
-          background: #065fd4;
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 18px;
-          cursor: pointer;
-          font-size: 14px;
-          display: none;
-        ">${index === total - 1 ? 'Finish Quiz' : 'Next Question'}</button>
+        <button class="next-question">${index === total - 1 ? 'Finish Quiz' : 'Next Question'}</button>
       </div>
     </div>
   `;
@@ -279,27 +150,15 @@ function renderQuizQuestion(question, index, total) {
 function showQuizResults(score, total) {
   const quizContent = document.querySelector('.quiz-content');
   if (!quizContent) return;
-
   const percentage = (score / total) * 100;
   const resultMessage = percentage >= 80 ? 'Great job!' : 'Keep learning!';
-
   quizContent.innerHTML = `
-    <div style="text-align: center; padding: 24px 0;">
-      <div style="font-size: 24px; color: #030303; margin-bottom: 8px;">${resultMessage}</div>
-      <div style="font-size: 16px; color: #606060;">You scored ${score} out of ${total}</div>
-      <button class="retry-quiz-button" style="
-        background: #065fd4;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 18px;
-        cursor: pointer;
-        font-size: 14px;
-        margin-top: 16px;
-      ">Try Again</button>
+    <div class="quiz-results">
+      <div class="quiz-results-title">${resultMessage}</div>
+      <div class="quiz-results-score">You scored ${score} out of ${total}</div>
+      <button class="retry-quiz-button">Try Again</button>
     </div>
   `;
-
   const retryButton = quizContent.querySelector('.retry-quiz-button');
   retryButton.addEventListener('click', () => initializeQuiz(currentTakeaways.quiz));
 }
@@ -795,126 +654,6 @@ function updateTakeawayContent(relevantTakeaways) {
     }, 500); // Increased delay before content update
   }
 }
-
-// Updated styles with Apple-like aesthetics
-const wipeTransitionStyles = `
-  .yt-video-takeaways {
-    position: relative;
-    overflow: hidden;
-    min-height: 100px;
-  }
-
-  .wipe-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.5s cubic-bezier(0.645, 0.045, 0.355, 1);
-    z-index: 1;
-  }
-
-  .wipe-overlay-content {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .logo-container {
-    position: relative;
-    width: 80px;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .thinking-lines {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transform: scale(0.8);
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .thinking-lines path {
-    fill: none;
-    stroke: #A259FF;
-    stroke-width: 2;
-    stroke-linecap: round;
-    opacity: 0;
-    transform-origin: center;
-  }
-
-  .wipe-overlay[style*="scaleX(1)"] .thinking-lines {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  .wipe-overlay[style*="scaleX(1)"] .thinking-lines path {
-    opacity: 1;
-    animation: sparkle 1.5s ease-in-out infinite;
-  }
-
-  .thinking-lines .sparkle-2 { animation-delay: 0.2s !important; }
-  .thinking-lines .sparkle-3 { animation-delay: 0.4s !important; }
-  .thinking-lines .sparkle-4 { animation-delay: 0.1s !important; }
-  .thinking-lines .sparkle-5 { animation-delay: 0.3s !important; }
-  .thinking-lines .sparkle-6 { animation-delay: 0.5s !important; }
-
-  .wipe-overlay-logo {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    opacity: 0;
-    transform: scale(0.8) rotate(-10deg);
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    z-index: 1;
-  }
-
-  .wipe-overlay[style*="scaleX(1)"] .wipe-overlay-logo {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    animation: logoWiggle 1s cubic-bezier(0.4, 0, 0.2, 1) 0.2s;
-  }
-
-  @keyframes logoWiggle {
-    0%, 100% { transform: scale(1) rotate(0deg); }
-    25% { transform: scale(1.1) rotate(5deg); }
-    50% { transform: scale(1.1) rotate(-5deg); }
-    75% { transform: scale(1.1) rotate(3deg); }
-  }
-
-  @keyframes sparkle {
-    0%, 100% {
-      opacity: 0;
-      transform: scale(0.3) rotate(0deg);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1) rotate(180deg);
-    }
-  }
-
-  .takeaways-content {
-    min-height: 60px;
-    position: relative;
-  }
-`;
-
-// Add the new styles to the existing style element
-document.querySelector('style').textContent += wipeTransitionStyles;
 
 // Add event listener for video seeking
 function setupVideoSeekListener(video) {

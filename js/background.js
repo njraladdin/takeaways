@@ -1,3 +1,5 @@
+importScripts('geminiModels.js');
+
 async function getVideoDetails(message) {
   const videoId = message.videoId;
   
@@ -243,7 +245,7 @@ async function getVideoSummary(videoDetails) {
     console.log('[YT Video] Generated AI Prompt:', prompt);
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TAKEAWAYS_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -420,7 +422,7 @@ async function isRelevantContent(videoDetails) {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VALIDATION_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -463,7 +465,7 @@ async function isRelevantContent(videoDetails) {
 async function validateApiKey(apiKey) {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VALIDATION_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
