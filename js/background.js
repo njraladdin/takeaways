@@ -162,9 +162,7 @@ async function getVideoSummary(videoDetails) {
         "takeaways": [
           {
             "minute": minute_number,
-            "key_point": "main takeaway from this section",
-            "significanceScore": number_between_1_and_100,
-            "interestScore": number_between_1_and_100
+            "key_point": "main takeaway from this section"
           }
         ]
       }
@@ -173,29 +171,28 @@ async function getVideoSummary(videoDetails) {
       - Focus only on substantive content and key insights
       - Skip general housekeeping, outros, or non-content segments
       - Place the takeaway at the minute when the point starts being discussed
+      - Make sure each takeaway is unique and not duplicated
       
-      Scoring criteria:
-
-      significanceScore (1-100):
+      Prioritize takeaways based on these criteria:
+      
+      Importance factors:
       - How important this point is to the overall message
       - How actionable or practical the insight is
       - How novel or unique the information is
-      - Higher scores (70-100) for major insights or crucial turning points
-      - Lower scores (1-30) for supporting details or context
-
-      interestScore (1-100):
+      - Major insights or crucial turning points should be prioritized
+      - Supporting details or context are less important unless they provide unique value
+      
+      Interest factors:
       - How likely is this to grab attention or surprise the reader
       - How memorable or thought-provoking is the insight
       - How well it illustrates a complex idea with a clear example
-      - Higher scores (70-100) for "wow moments" or counterintuitive insights
-      - Lower scores (1-30) for expected or commonly known information
-
+      - "Wow moments" or counterintuitive insights are particularly valuable
+      - Expected or commonly known information is less valuable
+      
       Example takeaway:
       {
         "minute": 6,
-        "key_point": "Lawyers reject AI tools that are 99% accurate because one mistake could cost millions in lawsuits",
-        "significanceScore": 85,
-        "interestScore": 90
+        "key_point": "Lawyers reject AI tools that are 99% accurate because one mistake could cost millions in lawsuits"
       }
       
       For takeaways:
@@ -205,7 +202,7 @@ async function getVideoSummary(videoDetails) {
       - Sort the takeaways chronologically by minute
     `;
 
-    // Update the responseSchema to remove quiz
+    // Update the responseSchema to remove significanceScore and interestScore
     const responseSchema = {
       type: "object",
       properties: {
@@ -217,11 +214,9 @@ async function getVideoSummary(videoDetails) {
             type: "object",
             properties: {
               minute: { type: "integer" },
-              key_point: { type: "string" },
-              significanceScore: { type: "integer", minimum: 1, maximum: 100 },
-              interestScore: { type: "integer", minimum: 1, maximum: 100 }
+              key_point: { type: "string" }
             },
-            required: ["minute", "key_point", "significanceScore", "interestScore"]
+            required: ["minute", "key_point"]
           }
         }
       },
@@ -441,14 +436,88 @@ async function validateApiKey(apiKey) {
   }
 }
 
+// Add cache management functions
+async function getCachedTakeaways(videoId) {
+  try {
+    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}`;
+    const result = await chrome.storage.local.get(cacheKey);
+    
+    if (result[cacheKey]) {
+      console.log('[YT Video] Cache hit for video:', videoId);
+      return result[cacheKey];
+    }
+    
+    console.log('[YT Video] Cache miss for video:', videoId);
+    return null;
+  } catch (error) {
+    console.error('[YT Video] Cache retrieval error:', error);
+    return null;
+  }
+}
+
+async function storeTakeawaysInCache(videoId, takeaways) {
+  try {
+    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}`;
+    
+    // Deduplicate takeaways before caching
+    if (takeaways.takeaways && Array.isArray(takeaways.takeaways)) {
+      const uniqueTakeaways = [];
+      const seen = new Set();
+      
+      for (const takeaway of takeaways.takeaways) {
+        if (!seen.has(takeaway.key_point)) {
+          uniqueTakeaways.push(takeaway);
+          seen.add(takeaway.key_point);
+        }
+      }
+      
+      // Replace with deduplicated array
+      takeaways.takeaways = uniqueTakeaways;
+      
+      // Add a unique ID if not present
+      if (!takeaways.id) {
+        takeaways.id = Date.now().toString();
+      }
+    }
+    
+    // Add a timestamp to the cached data
+    const cachedData = {
+      ...takeaways,
+      cachedAt: new Date().toISOString()
+    };
+    
+    await chrome.storage.local.set({ [cacheKey]: cachedData });
+    console.log('[YT Video] Stored takeaways in cache for video:', videoId);
+    return true;
+  } catch (error) {
+    console.error('[YT Video] Cache storage error:', error);
+    return false;
+  }
+}
+
 // Update the message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'NEW_VIDEO' && message.videoId) {
     console.log('[YT Video] Processing new video:', message.videoId);
     
-    // Process the video directly without checking cache
+    // Process the video with cache checking
     (async () => {
       try {
+        // First check if we have cached takeaways for this video
+        if (!message.forceRegenerate) {
+          const cachedTakeaways = await getCachedTakeaways(message.videoId);
+          if (cachedTakeaways) {
+            // Send cached takeaways to content script
+            chrome.tabs.sendMessage(sender.tab.id, {
+              type: 'VIDEO_TAKEAWAYS',
+              takeaways: cachedTakeaways,
+              fromCache: true
+            });
+            return;
+          }
+        }
+        
+        // No cache hit or regeneration requested, proceed with generating new takeaways
         const videoDetails = await getVideoDetails(message);
         if (!videoDetails || !videoDetails.captions.available) {
           chrome.tabs.sendMessage(sender.tab.id, {
@@ -501,10 +570,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             throw new Error('Failed to generate takeaways');
           }
           
-          // Send takeaways to content script without caching
+          // Store takeaways in cache before sending
+          await storeTakeawaysInCache(message.videoId, takeaways);
+          
+          // Send takeaways to content script
           chrome.tabs.sendMessage(sender.tab.id, {
             type: 'VIDEO_TAKEAWAYS',
-            takeaways: takeaways
+            takeaways: takeaways,
+            fromCache: false
           });
 
         } catch (error) {

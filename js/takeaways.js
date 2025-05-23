@@ -85,8 +85,12 @@ function handleVideoTimeUpdate(e) {
 
 function handleRetry() {
   const videoId = new URL(location.href).searchParams.get('v');
-  // No need to remove from cache since we're not caching anymore
-  chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
+  // Force regeneration by setting forceRegenerate flag
+  chrome.runtime.sendMessage({ 
+    type: 'NEW_VIDEO', 
+    videoId,
+    forceRegenerate: true 
+  });
   
   // Show the unified status and disable retry button
   const statusElement = document.querySelector('.takeaways-status');
@@ -242,8 +246,19 @@ function updateTakeawayContent(relevantTakeaways) {
       
       // Only rebuild the list if it's not already populated
       if (allList.children.length === 0 || allList.dataset.lastUpdated !== currentTakeaways.id) {
+        // First, deduplicate the takeaways in the full list
+        const uniqueFullTakeaways = [];
+        const seenFullTakeaways = new Set();
+        
+        for (const takeaway of currentTakeaways.takeaways) {
+          if (!seenFullTakeaways.has(takeaway.key_point)) {
+            uniqueFullTakeaways.push(takeaway);
+            seenFullTakeaways.add(takeaway.key_point);
+          }
+        }
+        
         // Sort takeaways by minute for the full list
-        const sortedTakeaways = [...currentTakeaways.takeaways].sort((a, b) => a.minute - b.minute);
+        const sortedTakeaways = [...uniqueFullTakeaways].sort((a, b) => a.minute - b.minute);
         
         allList.innerHTML = sortedTakeaways.map((t, i) => {
           // Format timestamp for each takeaway
@@ -380,7 +395,7 @@ function checkTimeRequirements(video) {
       console.log('[YT Captions] Time requirements met, requesting takeaways');
       processedVideos.add(videoId);
       
-      // Always request new takeaways, no cache checking
+      // Request takeaways, cache will be checked in the background script
       chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
     }
   }
@@ -561,7 +576,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       
       // Handle the takeaways data
       if (message.takeaways) {
+        // Deduplicate takeaways before storing them
+        if (message.takeaways.takeaways && Array.isArray(message.takeaways.takeaways)) {
+          const uniqueTakeaways = [];
+          const seen = new Set();
+          
+          for (const takeaway of message.takeaways.takeaways) {
+            if (!seen.has(takeaway.key_point)) {
+              uniqueTakeaways.push(takeaway);
+              seen.add(takeaway.key_point);
+            }
+          }
+          
+          // Replace with deduplicated array
+          message.takeaways.takeaways = uniqueTakeaways;
+          
+          // Add a unique ID to the takeaways object if not present
+          if (!message.takeaways.id) {
+            message.takeaways.id = Date.now().toString();
+          }
+        }
+        
         currentTakeaways = message.takeaways;
+        
+        // Show a small indicator if the takeaways were loaded from cache
+        if (message.fromCache) {
+          const statusElement = document.querySelector('.takeaways-status');
+          if (statusElement) {
+            statusElement.style.display = 'flex';
+            const spinner = statusElement.querySelector('.takeaways-spinner');
+            if (spinner) spinner.style.display = 'none';
+            const span = statusElement.querySelector('span');
+            if (span) {
+              span.textContent = 'Loaded from cache';
+              
+              // Hide the cache indicator after 3 seconds
+              setTimeout(() => {
+                if (span.textContent === 'Loaded from cache') {
+                  statusElement.style.display = 'none';
+                }
+              }, 3000);
+            }
+          }
+        }
+        
         const video = document.querySelector('video');
         if (video) {
           updateUI(video, video.currentTime, message.takeaways.takeaways);
