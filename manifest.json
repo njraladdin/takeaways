@@ -22,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
-      "js": ["js/content.js"],
+      "js": ["js/takeaways.js"],
       "run_at": "document_idle"
     }
   ],
@@ -37,7 +37,7 @@
     }
   },
   "web_accessible_resources": [{
-    "resources": ["icons/*", "css/content.css", "html/takeaways.html"],
+    "resources": ["icons/*", "css/takeaways.css", "html/takeaways.html"],
     "matches": ["https://*.youtube.com/*"]
   }]
 }

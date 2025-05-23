@@ -20,7 +20,7 @@ let isInjectingUI = false;
     link.id = 'yt-takeaways-content-css';
     link.rel = 'stylesheet';
     link.type = 'text/css';
-    link.href = chrome.runtime.getURL('css/content.css');
+    link.href = chrome.runtime.getURL('css/takeaways.css');
     document.head.appendChild(link);
   }
 })();
@@ -247,11 +247,17 @@ function handleRetry() {
   chrome.storage.local.remove(`takeaways_${videoId}`);
   chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
   
-  // Show the regeneration status and disable retry button
-  const statusElement = document.querySelector('.regeneration-status');
+  // Show the unified status and disable retry button
+  const statusElement = document.querySelector('.takeaways-status');
   const retryButton = document.querySelector('.retry-button');
   
-  if (statusElement) statusElement.style.display = 'flex';
+  if (statusElement) {
+    statusElement.style.display = 'flex';
+    const spinner = statusElement.querySelector('.takeaways-spinner');
+    const span = statusElement.querySelector('span');
+    if (spinner) spinner.style.display = 'block';
+    if (span) span.textContent = 'Regenerating...';
+  }
   if (retryButton) {
     retryButton.style.opacity = '0.5';
     retryButton.style.cursor = 'default';
@@ -489,6 +495,18 @@ function updateTakeawayContent(relevantTakeaways) {
           element.textContent = relevantTakeaways[index].key_point;
         }
       });
+
+      // --- Render all takeaways list ---
+      const allList = container.querySelector('.all-takeaways-list');
+      if (allList && currentTakeaways?.takeaways) {
+        const currentKeys = new Set(relevantTakeaways.map(t => t.key_point));
+        allList.innerHTML = currentTakeaways.takeaways.map((t, i) => `
+          <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}">
+            <span style="font-size:12px;color:#888;margin-right:8px;">${i+1}.</span> ${t.key_point}
+          </div>
+        `).join('');
+      }
+      // ---
     }, 500); // Increased delay before content update
   }
 }
@@ -614,9 +632,17 @@ document.addEventListener('yt-navigate-finish', () => {
   }
 });
 
-function updateTakeawaysStatus(status, error = null) {
+// Refactored to be async-aware and prevent null errors
+async function updateTakeawaysStatus(status, error = null, _retry = false) {
   if (!takeawaysContainer) {
-    initializeUI();
+    await initializeUI();
+    // Only retry once to avoid infinite loops
+    if (!_retry) {
+      return updateTakeawaysStatus(status, error, true);
+    } else {
+      // If still not set, abort
+      return;
+    }
   }
 
   const content = takeawaysContainer.querySelector('.takeaways-content');
@@ -652,21 +678,24 @@ function updateTakeawaysStatus(status, error = null) {
 // Update the message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PROCESSING_STATUS') {
-    switch (message.status) {
-      case 'LOADING_VIDEO_DETAILS':
-        updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
-        break;
-      case 'CHECKING_RELEVANCE':
-        updateTakeawaysStatus('CHECKING_RELEVANCE');
-        break;
-      case 'GENERATING_TAKEAWAYS':
-        updateTakeawaysStatus('GENERATING');
-        break;
+    const statusElement = document.querySelector('.takeaways-status');
+    if (statusElement) {
+      statusElement.style.display = 'flex';
+      const spinner = statusElement.querySelector('.takeaways-spinner');
+      const span = statusElement.querySelector('span');
+      if (spinner) spinner.style.display = (message.status === 'GENERATING_TAKEAWAYS' || message.status === 'LOADING_VIDEO_DETAILS' || message.status === 'CHECKING_RELEVANCE') ? 'block' : 'none';
+      if (span) {
+        if (message.status === 'LOADING_VIDEO_DETAILS') span.textContent = 'Loading video details...';
+        else if (message.status === 'CHECKING_RELEVANCE') span.textContent = 'Checking content type...';
+        else if (message.status === 'GENERATING_TAKEAWAYS') span.textContent = 'Generating takeaways...';
+        else span.textContent = '';
+      }
     }
+    updateTakeawaysStatus(message.status);
   } else if (message.type === 'VIDEO_TAKEAWAYS') {
     // Clear any loading states
     const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
-    const regenerationStatus = document.querySelector('.regeneration-status');
+    const statusElement = document.querySelector('.takeaways-status');
     const retryButton = document.querySelector('.retry-button');
     
     // Remove loading UI
@@ -674,9 +703,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       loadingUI.remove();
     }
     
-    // Reset regeneration status if it exists
-    if (regenerationStatus) {
-      regenerationStatus.style.display = 'none';
+    // Reset status if it exists
+    if (statusElement) {
+      statusElement.style.display = 'none';
+      const spinner = statusElement.querySelector('.takeaways-spinner');
+      if (spinner) spinner.style.display = 'none';
+      const span = statusElement.querySelector('span');
+      if (span) span.textContent = '';
     }
     
     // Re-enable retry button if it exists
@@ -701,11 +734,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.type === 'PROCESSING_ERROR') {
     // Clear loading states and show error
     const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
-    const regenerationStatus = document.querySelector('.regeneration-status');
+    const statusElement = document.querySelector('.takeaways-status');
     const retryButton = document.querySelector('.retry-button');
     
-    if (regenerationStatus) {
-      regenerationStatus.style.display = 'none';
+    if (statusElement) {
+      statusElement.style.display = 'flex';
+      const spinner = statusElement.querySelector('.takeaways-spinner');
+      if (spinner) spinner.style.display = 'none';
+      const span = statusElement.querySelector('span');
+      if (span) span.textContent = message.error || 'An error occurred';
     }
     
     if (retryButton) {
@@ -725,54 +762,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Add CSS for loading spinner
-const style = document.createElement('style');
-style.textContent = `
-  .takeaways-content {
-    transition: opacity 0.15s ease-in-out;
-  }
-
-  .loading-spinner {
-    width: 20px;
-    height: 20px;
-    margin: 8px auto;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #3498db;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-
-  .video-progress {
-    transition: width 0.2s ease-out;
-  }
-
-  .takeaway-item {
-    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-  }
-
-  .animate-takeaway {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  .retry-button:disabled {
-    pointer-events: none;
-  }
-`;
-document.head.appendChild(style);
-
-// Add these additional styles
-const additionalStyles = `
-  .takeaway-text {
-    display: inline-block;
-    white-space: pre-wrap;
-  }
-`;
-
-// Add the new styles to the existing style element
-document.querySelector('style').textContent += additionalStyles;
