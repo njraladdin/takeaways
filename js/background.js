@@ -444,18 +444,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'NEW_VIDEO' && message.videoId) {
     console.log('[YT Video] Processing new video:', message.videoId);
     
-    // Check cache first
-    chrome.storage.local.get(`takeaways_${message.videoId}`, async (result) => {
-      if (result[`takeaways_${message.videoId}`]) {
-        console.log('[YT Video] Found cached takeaways, sending directly');
-        chrome.tabs.sendMessage(sender.tab.id, {
-          type: 'VIDEO_TAKEAWAYS',
-          takeaways: result[`takeaways_${message.videoId}`]
-        });
-        return;
-      }
-
-      // Process the video
+    // Process the video directly without checking cache
+    (async () => {
       try {
         const videoDetails = await getVideoDetails(message);
         if (!videoDetails || !videoDetails.captions.available) {
@@ -508,13 +498,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!takeaways) {
             throw new Error('Failed to generate takeaways');
           }
-
-          // Cache the results
-          await chrome.storage.local.set({
-            [`takeaways_${message.videoId}`]: takeaways
-          });
           
-          // Send final takeaways and ensure UI update
+          // Send takeaways to content script without caching
           chrome.tabs.sendMessage(sender.tab.id, {
             type: 'VIDEO_TAKEAWAYS',
             takeaways: takeaways
@@ -534,7 +519,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           error: 'An unexpected error occurred'
         });
       }
-    });
+    })();
 
     return true;
   }

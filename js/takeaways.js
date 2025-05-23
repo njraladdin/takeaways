@@ -93,7 +93,7 @@ function handleVideoTimeUpdate(e) {
 
 function handleRetry() {
   const videoId = new URL(location.href).searchParams.get('v');
-  chrome.storage.local.remove(`takeaways_${videoId}`);
+  // No need to remove from cache since we're not caching anymore
   chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
   
   // Show the unified status and disable retry button
@@ -339,22 +339,11 @@ function checkTimeRequirements(video) {
   if (tabOpenDuration >= MIN_TIME_REQUIRED && videoPlaybackTime >= MIN_TIME_REQUIRED) {
     const videoId = new URL(location.href).searchParams.get('v');
     if (!processedVideos.has(videoId)) {
-      console.log('[YT Captions] Time requirements met, checking cache');
+      console.log('[YT Captions] Time requirements met, requesting takeaways');
       processedVideos.add(videoId);
       
-      // Check cache first
-      chrome.storage.local.get(`takeaways_${videoId}`, (result) => {
-        if (result[`takeaways_${videoId}`]) {
-          console.log('[YT Captions] Found cached takeaways');
-          currentTakeaways = result[`takeaways_${videoId}`];
-          initializeUI(); // Only create UI when we have cached data
-          updateUI(video, video.currentTime, currentTakeaways.takeaways);
-        } else {
-          console.log('[YT Captions] No cache found, requesting new takeaways');
-          // Don't create UI yet, wait for relevance check
-          chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
-        }
-      });
+      // Always request new takeaways, no cache checking
+      chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
     }
   }
 }
