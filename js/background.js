@@ -130,7 +130,7 @@ async function getVideoSummary(videoDetails) {
       .join('\n\n');
 
     const prompt = `
-      Analyze this YouTube video and return a JSON response with specific, concrete takeaways for each minute.
+      Analyze this YouTube video and return a JSON response with specific, concrete takeaways with their timestamps.
       Focus on extracting memorable facts, specific examples, unique insights, or actionable advice.
       
       Title: ${videoDetails.video.title}
@@ -146,7 +146,7 @@ async function getVideoSummary(videoDetails) {
       - Extract specific facts, examples, or key insights 
       - Include concrete numbers, statistics, or real examples when available
       - Focus on memorable details that someone might want to reference later
-      - Avoid redundant insights - Skip minutes without new information, unless they contain novel details or significantly expand/contradict previous points
+      - Avoid redundant insights - Skip sections without new information, unless they contain novel details or significantly expand/contradict previous points
         
       - Bad example: "AI is rapidly evolving, creating significant opportunities"
       - Good example: "OpenAI's GPT-4 can score in top 1% on bar exams, outperforming 99% of human lawyers"
@@ -162,7 +162,7 @@ async function getVideoSummary(videoDetails) {
         "takeaways": [
           {
             "minute": minute_number,
-            "key_point": "main takeaway from this minute",
+            "key_point": "main takeaway from this section",
             "significanceScore": number_between_1_and_100,
             "interestScore": number_between_1_and_100
           }
@@ -172,6 +172,7 @@ async function getVideoSummary(videoDetails) {
       For each takeaway:
       - Focus only on substantive content and key insights
       - Skip general housekeeping, outros, or non-content segments
+      - Place the takeaway at the minute when the point starts being discussed
       
       Scoring criteria:
 
@@ -201,6 +202,7 @@ async function getVideoSummary(videoDetails) {
       - Include at least one takeaway for every 2-3 minutes of content
       - Minimum of 5 takeaways for any video longer than 10 minutes
       - Maximum of 20 takeaways for very long videos
+      - Sort the takeaways chronologically by minute
     `;
 
     // Update the responseSchema to remove quiz

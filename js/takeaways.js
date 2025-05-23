@@ -31,45 +31,37 @@ function updateTakeawayVisibility(currentTime, takeaways) {
     return [];
   }
 
-  const currentMinute = Math.floor(currentTime / 60);
-  const secondsIntoMinute = currentTime % 60;
+  // Convert minutes to seconds for each takeaway
+  const takeawaysWithSeconds = takeaways.map(takeaway => ({
+    ...takeaway,
+    startSeconds: takeaway.minute * 60
+  }));
   
-  // Find all takeaways for the current minute
-  let relevantTakeaways = [];
+  // Sort takeaways by their start time
+  takeawaysWithSeconds.sort((a, b) => a.startSeconds - b.startSeconds);
   
-  // Find the highest minute that's less than or equal to current minute
-  const validMinutes = takeaways
-    .map(t => t.minute)
-    .filter(m => m <= currentMinute);
-  
-  if (validMinutes.length > 0) {
-    const lastValidMinute = Math.max(...validMinutes);
-    
-    // Only show takeaways after 10 seconds into the minute
-    if (secondsIntoMinute >= 10 || lastValidMinute < currentMinute) {
-      // Get all takeaways for that minute
-      relevantTakeaways = takeaways.filter(t => t.minute === lastValidMinute);
-    } else if (lastValidMinute < currentMinute) {
-      // If we're in a new minute but before 10 seconds, show previous minute's takeaways
-      const previousValidMinute = Math.max(...validMinutes.filter(m => m < currentMinute));
-      if (previousValidMinute >= 0) {
-        relevantTakeaways = takeaways.filter(t => t.minute === previousValidMinute);
-      }
+  // Find the current takeaway - the one with the highest start time that's less than or equal to current time
+  let currentTakeaway = null;
+  for (let i = takeawaysWithSeconds.length - 1; i >= 0; i--) {
+    if (takeawaysWithSeconds[i].startSeconds <= currentTime) {
+      currentTakeaway = takeawaysWithSeconds[i];
+      break;
     }
   }
-
+  
   const takeawayDot = document.querySelector('.takeaway-dot');
   
-  // Reset takeaway dot if no relevant takeaways
-  if (!relevantTakeaways.length && takeawayDot) {
+  // Reset takeaway dot if no current takeaway
+  if (!currentTakeaway && takeawayDot) {
     takeawayDot.style.opacity = '0';
     takeawayDot.style.transform = 'scale(0)';
+    return [];
   } else if (takeawayDot) {
     takeawayDot.style.opacity = '1';
     takeawayDot.style.transform = 'scale(1)';
   }
 
-  return relevantTakeaways;
+  return currentTakeaway ? [currentTakeaway] : [];
 }
 
 // Main Update Function
@@ -99,6 +91,12 @@ function handleRetry() {
   // Show the unified status and disable retry button
   const statusElement = document.querySelector('.takeaways-status');
   const retryButton = document.querySelector('.retry-button');
+  const takeawaysSection = document.querySelector('.takeaways-section');
+  
+  // Hide the takeaways section during regeneration
+  if (takeawaysSection) {
+    takeawaysSection.style.display = 'none';
+  }
   
   if (statusElement) {
     statusElement.style.display = 'flex';
@@ -111,11 +109,6 @@ function handleRetry() {
     retryButton.style.opacity = '0.5';
     retryButton.style.cursor = 'default';
     retryButton.disabled = true;
-  }
-  
-  const content = document.querySelector('.takeaways-content');
-  if (content) {
-    content.innerHTML = '<div style="padding: 8px 0;">Generating new takeaways...</div>';
   }
 }
 
@@ -152,6 +145,12 @@ async function initializeUI() {
     });
 
     takeawaysContainer = takeawaysCard;
+
+    // Hide the takeaways section by default until we have actual takeaways
+    const takeawaysSection = takeawaysCard.querySelector('.takeaways-section');
+    if (takeawaysSection) {
+      takeawaysSection.style.display = 'none';
+    }
 
     // Attach event listeners
     // Tooltips for buttons
@@ -206,7 +205,16 @@ function updateTakeawayContent(relevantTakeaways) {
   if (uniqueTakeaways.length > 0) {
     // Find the index of this takeaway in the full takeaways array
     const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === uniqueTakeaways[0].key_point) + 1;
-    titleSpan.textContent = `Key Takeaway${uniqueTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
+    
+    // Format timestamp
+    const minutes = uniqueTakeaways[0].minute;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const timestamp = hours > 0 
+      ? `${hours}:${mins.toString().padStart(2, '0')}`
+      : `${mins}:00`;
+    
+    titleSpan.textContent = `Key Takeaway #${takeawayIndex} (${timestamp})`;
     
     // Display takeaway in the content area
     content.innerHTML = uniqueTakeaways.map((takeaway, index) => `
@@ -234,14 +242,40 @@ function updateTakeawayContent(relevantTakeaways) {
       
       // Only rebuild the list if it's not already populated
       if (allList.children.length === 0 || allList.dataset.lastUpdated !== currentTakeaways.id) {
-        allList.innerHTML = currentTakeaways.takeaways.map((t, i) => `
-          <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}" data-key="${t.key_point}">
-            <div class="takeaway-dot"></div>
-            <span class="takeaway-number">${i+1}.</span>
-            <span class="takeaway-content">${t.key_point}</span>
-          </div>
-        `).join('');
+        // Sort takeaways by minute for the full list
+        const sortedTakeaways = [...currentTakeaways.takeaways].sort((a, b) => a.minute - b.minute);
+        
+        allList.innerHTML = sortedTakeaways.map((t, i) => {
+          // Format timestamp for each takeaway
+          const mins = t.minute;
+          const hrs = Math.floor(mins / 60);
+          const m = mins % 60;
+          const ts = hrs > 0 
+            ? `${hrs}:${m.toString().padStart(2, '0')}`
+            : `${m}:00`;
+          
+          return `
+            <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}" data-key="${t.key_point}" data-seconds="${t.minute * 60}">
+              <div class="takeaway-dot"></div>
+              <span class="takeaway-timestamp">${ts}</span>
+              <span class="takeaway-content">${t.key_point}</span>
+            </div>
+          `;
+        }).join('');
+        
         allList.dataset.lastUpdated = currentTakeaways.id;
+        
+        // Add click handlers to jump to timestamp
+        allList.querySelectorAll('.all-takeaway-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const seconds = parseInt(item.dataset.seconds, 10);
+            const video = document.querySelector('video');
+            if (video && !isNaN(seconds)) {
+              video.currentTime = seconds;
+              video.play().catch(e => console.error('Failed to play video:', e));
+            }
+          });
+        });
       } else {
         // Just update the current class
         Array.from(allList.querySelectorAll('.all-takeaway-item')).forEach(item => {
@@ -324,10 +358,14 @@ function checkForVideo() {
       
       // Force initial UI creation if we already have takeaways
       if (currentTakeaways) {
-        initializeUI();
-        setTimeout(() => {
+        initializeUI().then(() => {
           updateUI(video, video.currentTime, currentTakeaways.takeaways);
-        }, 100);
+        });
+      } else {
+        // Initialize UI with loading state if no takeaways yet
+        initializeUI().then(() => {
+          updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+        });
       }
     }
   }
@@ -393,9 +431,10 @@ function waitForSecondaryInner(callback) {
 // Initialize on page load
 if (location.href.includes('youtube.com/watch')) {
   waitForSecondaryInner(() => {
-    initializeUI();
-    updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
-    checkForVideo();
+    initializeUI().then(() => {
+      updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+      checkForVideo();
+    });
   });
 }
 
@@ -404,9 +443,10 @@ document.addEventListener('yt-navigate-finish', () => {
   console.log('[YT Captions] Navigation finished');
   if (location.href.includes('youtube.com/watch')) {
     waitForSecondaryInner(() => {
-      initializeUI();
-      updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
-      checkForVideo();
+      initializeUI().then(() => {
+        updateTakeawaysStatus('LOADING_VIDEO_DETAILS');
+        checkForVideo();
+      });
     });
   }
 });
@@ -425,7 +465,13 @@ async function updateTakeawaysStatus(status, error = null, _retry = false) {
   }
 
   const content = takeawaysContainer.querySelector('.takeaways-content');
-  if (!content) return;
+  const titleSpan = takeawaysContainer.querySelector('.takeaways-title span');
+  const takeawayDot = takeawaysContainer.querySelector('.takeaway-dot');
+  const takeawaysHeader = takeawaysContainer.querySelector('.takeaways-header');
+  const takeawaysSection = takeawaysContainer.querySelector('.takeaways-section');
+  const allTakeawaysList = takeawaysContainer.querySelector('.all-takeaways-list');
+  
+  if (!content || !takeawaysSection) return;
 
   // Only update if the status is different or if it's an error
   if (content.dataset.currentStatus === status && status !== 'ERROR') {
@@ -437,21 +483,34 @@ async function updateTakeawaysStatus(status, error = null, _retry = false) {
     CHECKING_RELEVANCE: 'Checking content type...',
     NOT_RELEVANT: 'This content is not suitable for generating takeaways.',
     GENERATING: 'Generating takeaways...',
+    GENERATING_TAKEAWAYS: 'Generating takeaways...',
     ERROR: error || 'An error occurred'
   };
 
-  // Add fade transition
-  content.style.opacity = '0';
-  setTimeout(() => {
-    content.innerHTML = `
-      <div style="padding: 8px 0;">
-        ${statusMessages[status]}
-        ${status === 'GENERATING' ? '<div class="loading-spinner"></div>' : ''}
-      </div>
-    `;
-    content.dataset.currentStatus = status;
-    content.style.opacity = '1';
-  }, 150);
+  // During loading or error states, only show the status in the header
+  const isLoading = status === 'LOADING_VIDEO_DETAILS' || 
+                    status === 'CHECKING_RELEVANCE' || 
+                    status === 'GENERATING' || 
+                    status === 'GENERATING_TAKEAWAYS';
+  
+  // Show status in the header
+  const statusElement = takeawaysContainer.querySelector('.takeaways-status');
+  if (statusElement) {
+    statusElement.style.display = 'flex';
+    const spinner = statusElement.querySelector('.takeaways-spinner');
+    const span = statusElement.querySelector('span');
+    if (spinner) spinner.style.display = isLoading ? 'block' : 'none';
+    if (span) span.textContent = statusMessages[status] || '';
+  }
+  
+  // Hide the takeaway section completely during loading/error
+  if (isLoading || status === 'ERROR' || status === 'NOT_RELEVANT') {
+    takeawaysSection.style.display = 'none';
+  } else {
+    takeawaysSection.style.display = 'block';
+  }
+  
+  content.dataset.currentStatus = status;
 }
 
 // Update the message listener
@@ -493,16 +552,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     // Initialize the full UI
-    initializeUI();
-    
-    // Handle the takeaways data
-    if (message.takeaways) {
-      currentTakeaways = message.takeaways;
-      const video = document.querySelector('video');
-      if (video) {
-        updateUI(video, video.currentTime, message.takeaways.takeaways);
+    initializeUI().then(() => {
+      // Show the takeaways section now that we have data
+      const takeawaysSection = document.querySelector('.takeaways-section');
+      if (takeawaysSection) {
+        takeawaysSection.style.display = 'block';
       }
-    }
+      
+      // Handle the takeaways data
+      if (message.takeaways) {
+        currentTakeaways = message.takeaways;
+        const video = document.querySelector('video');
+        if (video) {
+          updateUI(video, video.currentTime, message.takeaways.takeaways);
+        }
+      }
+    });
   } else if (message.type === 'PROCESSING_ERROR') {
     // Clear loading states and show error
     const statusElement = document.querySelector('.takeaways-status');

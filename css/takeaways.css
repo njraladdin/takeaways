@@ -193,6 +193,14 @@
   align-items: flex-start;
 }
 
+.all-takeaways-list .all-takeaway-item:hover {
+  background-color: #f5f5f5;
+}
+
+.all-takeaways-list .all-takeaway-item:active {
+  background-color: #eaeaea;
+}
+
 .all-takeaways-list .all-takeaway-item:not(:last-child) {
   border-bottom: 1px solid #f0f0f0;
 }
@@ -209,6 +217,17 @@
   color: #888;
   margin-right: 8px;
   flex-shrink: 0;
+}
+
+.all-takeaways-list .all-takeaway-item .takeaway-timestamp {
+  font-size: 12px;
+  color: #888;
+  margin-right: 8px;
+  flex-shrink: 0;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
 }
 
 .all-takeaways-list .all-takeaway-item .takeaway-content {
@@ -230,6 +249,12 @@
 
 .all-takeaways-list .all-takeaway-item.current .takeaway-dot {
   opacity: 1;
+}
+
+.all-takeaways-list .all-takeaway-item.current .takeaway-timestamp {
+  background: #ffeeee;
+  color: #cc0000;
+  font-weight: bold;
 }
 
 .loading-spinner {
