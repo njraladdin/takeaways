@@ -166,45 +166,7 @@ async function getVideoSummary(videoDetails) {
             "significanceScore": number_between_1_and_100,
             "interestScore": number_between_1_and_100
           }
-        ],
-        "quiz": {
-          "description": "Test your understanding of the key concepts",
-          "questions": [
-            {
-              "question": "Clear, specific question about an important takeaway",
-              "options": [
-                "Option A (correct answer)",
-                "Option B",
-                "Option C",
-                "Option D"
-              ],
-              "correctIndex": 0,
-              "explanation": "Brief explanation of why this answer is correct"
-            }
-          ]
-        }
-      }
-
-      For the quiz:
-      - Generate exactly 4 questions
-      - Focus on the most practical and actionable takeaways
-      - Questions should test understanding, not just memory
-      - Each question should have exactly 4 options
-      - Include a brief explanation for the correct answer
-      - Make wrong options plausible but clearly incorrect
-      - Ensure questions are specific and based on concrete facts from the video
-      
-      Example quiz question:
-      {
-        "question": "According to the video, what percentage increase in engagement do companies see when posting 3 times per week on LinkedIn?",
-        "options": [
-          "200%",
-          "100%",
-          "150%",
-          "50%"
-        ],
-        "correctIndex": 0,
-        "explanation": "The video specifically mentioned that posting 3 times per week results in 200% higher engagement compared to weekly posters."
+        ]
       }
 
       For each takeaway:
@@ -234,12 +196,35 @@ async function getVideoSummary(videoDetails) {
         "significanceScore": 85,
         "interestScore": 90
       }
-              For takeaways:
+      
+      For takeaways:
       - Include at least one takeaway for every 2-3 minutes of content
       - Minimum of 5 takeaways for any video longer than 10 minutes
       - Maximum of 20 takeaways for very long videos
-
     `;
+
+    // Update the responseSchema to remove quiz
+    const responseSchema = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        duration_minutes: { type: "integer" },
+        takeaways: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              minute: { type: "integer" },
+              key_point: { type: "string" },
+              significanceScore: { type: "integer", minimum: 1, maximum: 100 },
+              interestScore: { type: "integer", minimum: 1, maximum: 100 }
+            },
+            required: ["minute", "key_point", "significanceScore", "interestScore"]
+          }
+        }
+      },
+      required: ["title", "duration_minutes", "takeaways"]
+    };
 
     console.log('[YT Video] Sending AI request for video:', videoDetails.video.title);
     console.log('[YT Video] Generated AI Prompt:', prompt);
@@ -264,54 +249,7 @@ async function getVideoSummary(videoDetails) {
             topP: 0.7,
             maxOutputTokens: 8192,
             responseMimeType: "application/json",
-            responseSchema: {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                duration_minutes: { type: "integer" },
-                takeaways: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      minute: { type: "integer" },
-                      key_point: { type: "string" },
-                      significanceScore: { type: "integer", minimum: 1, maximum: 100 },
-                      interestScore: { type: "integer", minimum: 1, maximum: 100 }
-                    },
-                    required: ["minute", "key_point", "significanceScore", "interestScore"]
-                  }
-                },
-                quiz: {
-                  type: "object",
-                  properties: {
-                    description: { type: "string" },
-                    questions: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          question: { type: "string" },
-                          options: { 
-                            type: "array",
-                            items: { type: "string" },
-                            minItems: 4,
-                            maxItems: 4
-                          },
-                          correctIndex: { type: "integer", minimum: 0, maximum: 3 },
-                          explanation: { type: "string" }
-                        },
-                        required: ["question", "options", "correctIndex", "explanation"]
-                      },
-                      minItems: 5,
-                      maxItems: 5
-                    }
-                  },
-                  required: ["description", "questions"]
-                }
-              },
-              required: ["title", "duration_minutes", "takeaways", "quiz"]
-            }
+            responseSchema: responseSchema
           }
         })
       }

@@ -25,30 +25,9 @@ let isInjectingUI = false;
   }
 })();
 
-// UI Component Creation
-
 // UI Updates
-function updateProgressBar(video, currentTime) {
-  const progressBar = document.querySelector('.video-progress');
-  if (progressBar && video) {
-    const progress = (currentTime / video.duration) * 100;
-    progressBar.style.width = `${progress}%`;
-  }
-}
-
-function updateTimeDisplay(currentTime) {
-  const timeDisplay = document.querySelector('.current-time');
-  if (timeDisplay) {
-    const minutes = Math.floor(currentTime / 60);
-    const seconds = Math.floor(currentTime % 60);
-    timeDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  }
-}
-
 function updateTakeawayVisibility(currentTime, takeaways) {
-  const container = document.querySelector('.yt-video-takeaways');
-  if (!container || !takeaways) {
-    console.log('[YT Captions] No container or takeaways:', { container, takeaways });
+  if (!takeaways) {
     return [];
   }
 
@@ -79,154 +58,24 @@ function updateTakeawayVisibility(currentTime, takeaways) {
     }
   }
 
-  // Update visibility
-  container.style.opacity = relevantTakeaways.length ? '1' : '0';
-  container.style.transform = relevantTakeaways.length ? 'translateY(0)' : 'translateY(10px)';
-
-  // Update markers active state
-  const markers = document.querySelectorAll('.markers-container > div');
   const takeawayDot = document.querySelector('.takeaway-dot');
   
   // Reset takeaway dot if no relevant takeaways
   if (!relevantTakeaways.length && takeawayDot) {
     takeawayDot.style.opacity = '0';
     takeawayDot.style.transform = 'scale(0)';
+  } else if (takeawayDot) {
+    takeawayDot.style.opacity = '1';
+    takeawayDot.style.transform = 'scale(1)';
   }
 
-  markers.forEach((marker, index) => {
-    const minute = parseInt(marker.dataset.minute);
-    const isActive = relevantTakeaways.some(t => t.minute === minute);
-    
-    const dot = marker.querySelector('div:nth-child(2)');
-    const line = marker.querySelector('div:nth-child(1)');
-    
-    if (isActive) {
-      marker.classList.add('active');
-      dot.style.opacity = '1';
-      dot.style.backgroundColor = '#ff0000';
-      dot.style.transform = 'translateX(-50%) scale(1.5)';
-      line.style.opacity = '0.7';
-      line.style.backgroundColor = '#ff0000';
-      
-      // Reduced base push distance and adjusted falloff rate
-      const basePushDistance = 4; // Reduced from 12 to 8
-      const falloffRate = 0.6; // Reduced from 0.7 to 0.6 for faster falloff
-      
-      markers.forEach((otherMarker, otherIndex) => {
-        if (otherIndex !== index) {
-          const distance = Math.abs(otherIndex - index);
-          const pushDistance = basePushDistance * Math.pow(falloffRate, distance - 1);
-          const direction = otherIndex < index ? -1 : 1;
-          otherMarker.style.transform = `translateX(calc(-50% + ${pushDistance * direction}px))`;
-        }
-      });
-      
-      // Show and animate the takeaway dot
-      if (takeawayDot) {
-        takeawayDot.style.opacity = '1';
-        takeawayDot.style.transform = 'scale(1)';
-      }
-    } else {
-      marker.classList.remove('active');
-      dot.style.opacity = '0.5';
-      dot.style.backgroundColor = '#065fd4';
-      dot.style.transform = 'translateX(-50%) scale(1)';
-      line.style.opacity = '0.3';
-      line.style.backgroundColor = '#065fd4';
-      
-      // Only reset position if there are no active markers
-      const hasActiveMarker = Array.from(markers).some(m => m.classList.contains('active'));
-      if (!hasActiveMarker) {
-        marker.style.transform = 'translateX(-50%)';
-      }
-    }
-  });
-
   return relevantTakeaways;
-}
-
-// Markers Management
-function createMarker(minute, duration) {
-  const markerContainer = document.createElement('div');
-  const position = ((minute * 60 + 10) / duration) * 100;
-  
-  markerContainer.style.cssText = `
-    position: absolute;
-    left: ${position}%;
-    top: 0;
-    transform: translateX(-50%);
-    transition: transform 0.3s ease-out;
-  `;
-
-  // Create dot element with transition for size
-  const dot = document.createElement('div');
-  dot.style.cssText = `
-    width: 6px;
-    height: 6px;
-    background: #065fd4;
-    border-radius: 50%;
-    position: absolute;
-    top: 2px;
-    left: 50%;
-    transform: translateX(-50%) scale(1);
-    opacity: 0.5;
-    transition: opacity 0.3s, background-color 0.3s, transform 0.3s;
-    z-index: 1;
-  `;
-
-  // Create duration line element
-  const durationLine = document.createElement('div');
-  durationLine.style.cssText = `
-    position: absolute;
-    left: 50%;
-    width: ${(30 / duration) * 100 * 2}%;
-    height: 2px;
-    background: #065fd4;
-    top: 4px;
-    transform: translateX(-50%);
-    opacity: 0.3;
-    transition: opacity 0.3s, background-color 0.3s;
-  `;
-
-  markerContainer.appendChild(durationLine);
-  markerContainer.appendChild(dot);
-  
-  markerContainer.dataset.minute = minute;
-
-  markerContainer.addEventListener('mouseenter', () => {
-    dot.style.opacity = '1';
-    durationLine.style.opacity = '0.7';
-  });
-  
-  markerContainer.addEventListener('mouseleave', () => {
-    // Only reduce opacity if not active
-    if (!markerContainer.classList.contains('active')) {
-      dot.style.opacity = '0.5';
-      durationLine.style.opacity = '0.3';
-    }
-  });
-
-  return markerContainer;
-}
-
-function updateMarkers(video, takeaways) {
-  if (!video?.duration || !takeaways) return;
-  
-  const container = document.querySelector('.markers-container');
-  if (!container) return;
-
-  container.innerHTML = '';
-  takeaways.forEach(takeaway => {
-    container.appendChild(createMarker(takeaway.minute, video.duration));
-  });
 }
 
 // Main Update Function
 function updateUI(video, currentTime, takeaways) {
   console.log('[YT Captions] UpdateUI called:', { currentTime, takeaways });
   
-  updateTimeDisplay(currentTime);
-  updateProgressBar(video, currentTime);
   const relevantTakeaways = updateTakeawayVisibility(currentTime, takeaways);
   
   if (relevantTakeaways?.length) {
@@ -282,9 +131,7 @@ async function initializeUI() {
     }
 
     // Remove ALL existing UI (in case there are multiple)
-    document.querySelectorAll('.yt-takeaways-progress').forEach(el => el.remove());
-    document.querySelectorAll('.yt-video-takeaways').forEach(el => el.remove());
-    document.querySelectorAll('.yt-video-quiz').forEach(el => el.remove());
+    document.querySelectorAll('.yt-takeaways-card').forEach(el => el.remove());
 
     // Fetch and inject the HTML
     const htmlUrl = chrome.runtime.getURL('html/takeaways.html');
@@ -294,27 +141,21 @@ async function initializeUI() {
     tempDiv.innerHTML = htmlText;
 
     // Extract the relevant elements
-    const progressUI = tempDiv.querySelector('.yt-takeaways-progress');
-    const takeawaysCard = tempDiv.querySelector('.yt-video-takeaways');
-    const quizCard = tempDiv.querySelector('.yt-video-quiz');
+    const takeawaysCard = tempDiv.querySelector('.yt-takeaways-card');
 
     // Insert into the DOM
-    secondary.insertBefore(progressUI, secondary.firstChild);
-    secondary.insertBefore(takeawaysCard, progressUI.nextSibling);
-    secondary.insertBefore(quizCard, takeawaysCard.nextSibling);
+    secondary.insertBefore(takeawaysCard, secondary.firstChild);
 
     // Replace icon placeholders with extension URLs
-    [progressUI, takeawaysCard, quizCard].forEach(card => {
-      card.querySelectorAll('img[src="__ICON_48__"]').forEach(img => {
-        img.src = chrome.runtime.getURL('icons/icon48.png');
-      });
+    takeawaysCard.querySelectorAll('img[src="__ICON_48__"]').forEach(img => {
+      img.src = chrome.runtime.getURL('icons/icon48.png');
     });
 
     takeawaysContainer = takeawaysCard;
 
-    // Attach event listeners (retry, play quiz, tooltips, etc.)
+    // Attach event listeners
     // Tooltips for buttons
-    const buttons = progressUI.querySelectorAll('.play-quiz-button, .retry-button');
+    const buttons = takeawaysCard.querySelectorAll('.retry-button');
     buttons.forEach(button => {
       const tooltip = button.querySelector('.yt-tooltip');
       button.addEventListener('mouseenter', () => {
@@ -328,86 +169,17 @@ async function initializeUI() {
     });
 
     // Retry button
-    progressUI.querySelector('.retry-button').addEventListener('click', handleRetry);
-
-    // Play quiz button
-    progressUI.querySelector('.play-quiz-button').addEventListener('click', () => {
-      const quizCard = document.querySelector('.yt-video-quiz');
-      if (quizCard && currentTakeaways?.quiz) {
-        quizCard.style.display = 'block';
-        initializeQuiz(currentTakeaways.quiz);
-      }
-    });
-
-    // Hover effect for play quiz button
-    const playQuizButton = progressUI.querySelector('.play-quiz-button');
-    playQuizButton.addEventListener('mouseenter', () => {
-      playQuizButton.style.backgroundColor = '#e5e5e5';
-    });
-    playQuizButton.addEventListener('mouseleave', () => {
-      playQuizButton.style.backgroundColor = '#f2f2f2';
-    });
-
-    if (currentTakeaways) {
-      const video = document.querySelector('video');
-      updateMarkers(video, currentTakeaways.takeaways);
-    }
+    takeawaysCard.querySelector('.retry-button').addEventListener('click', handleRetry);
   } finally {
     isInjectingUI = false;
   }
-}
-
-function checkTimeRequirements(video) {
-  const tabOpenDuration = (Date.now() - tabOpenTime) / 1000;
-  
-  if (tabOpenDuration >= MIN_TIME_REQUIRED && videoPlaybackTime >= MIN_TIME_REQUIRED) {
-    const videoId = new URL(location.href).searchParams.get('v');
-    if (!processedVideos.has(videoId)) {
-      console.log('[YT Captions] Time requirements met, checking cache');
-      processedVideos.add(videoId);
-      
-      // Check cache first
-      chrome.storage.local.get(`takeaways_${videoId}`, (result) => {
-        if (result[`takeaways_${videoId}`]) {
-          console.log('[YT Captions] Found cached takeaways');
-          currentTakeaways = result[`takeaways_${videoId}`];
-          initializeUI(); // Only create UI when we have cached data
-          updateMarkers(video, currentTakeaways.takeaways);
-          updateUI(video, video.currentTime, currentTakeaways.takeaways);
-        } else {
-          console.log('[YT Captions] No cache found, requesting new takeaways');
-          // Don't create UI yet, wait for relevance check
-          chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
-        }
-      });
-    }
-  }
-}
-
-// Add this new function to handle the typewriter effect
-function typewriterEffect(element, text, speed = 10) {
-  let index = 0;
-  element.textContent = '';
-  
-  // Store the full text for instant display later
-  element.dataset.fullText = text;
-  
-  function type() {
-    if (index < text.length) {
-      element.textContent += text.charAt(index);
-      index++;
-      setTimeout(type, speed);
-    }
-  }
-  
-  type();
 }
 
 function updateTakeawayContent(relevantTakeaways) {
   const content = document.querySelector('.takeaways-content');
   const titleSpan = document.querySelector('.takeaways-title span');
   const takeawayDot = document.querySelector('.takeaway-dot');
-  const container = document.querySelector('.yt-video-takeaways');
+  const container = document.querySelector('.yt-takeaways-card');
   
   if (!content || !titleSpan) return;
 
@@ -428,99 +200,88 @@ function updateTakeawayContent(relevantTakeaways) {
   const newContent = uniqueTakeaways.map(t => t.key_point).join('|||');
   if (content.dataset.currentTakeaway === newContent) return;
   
-  // Track if these takeaways are being shown for the first time
-  const isFirstShow = content.dataset.currentTakeaway === undefined || 
-                     !content.dataset.shownTakeaways?.includes(newContent);
-  
   // Update tracking
   content.dataset.currentTakeaway = newContent;
-  content.dataset.shownTakeaways = content.dataset.shownTakeaways 
-    ? `${content.dataset.shownTakeaways},${newContent}`
-    : newContent;
 
   if (uniqueTakeaways.length > 0) {
-    let wipeOverlay = container.querySelector('.wipe-overlay');
-    if (!wipeOverlay) {
-      wipeOverlay = document.createElement('div');
-      wipeOverlay.className = 'wipe-overlay';
-      wipeOverlay.innerHTML = `
-        <div class="wipe-overlay-content">
-          <div class="logo-container">
-            <svg class="thinking-lines" viewBox="0 0 100 100">
-              <path class="sparkle-1" d="M20,20 L22,22 M20,24 L22,22 M24,20 L22,22 M24,24 L22,22"/>
-              <path class="sparkle-2" d="M80,20 L82,22 M80,24 L82,22 M84,20 L82,22 M84,24 L82,22"/>
-              <path class="sparkle-3" d="M20,80 L22,82 M20,84 L22,82 M24,80 L22,82 M24,84 L22,82"/>
-              <path class="sparkle-4" d="M80,80 L82,82 M80,84 L82,82 M84,80 L82,82 M84,84 L82,82"/>
-              <path class="sparkle-5" d="M50,10 L52,12 M50,14 L52,12 M54,10 L52,12 M54,14 L52,12"/>
-              <path class="sparkle-6" d="M50,90 L52,92 M50,94 L52,92 M54,90 L52,92 M54,94 L52,92"/>
-            </svg>
-            <img src="${chrome.runtime.getURL('icons/icon48.png')}" 
-                 class="wipe-overlay-logo" 
-                 alt="Logo">
-          </div>
-        </div>
-      `;
-      container.appendChild(wipeOverlay);
+    // Find the index of this takeaway in the full takeaways array
+    const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === uniqueTakeaways[0].key_point) + 1;
+    titleSpan.textContent = `Key Takeaway${uniqueTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
+    
+    // Display takeaway in the content area
+    content.innerHTML = uniqueTakeaways.map((takeaway, index) => `
+      <div class="takeaway-item" style="
+        padding: ${index === 0 ? '8px 0 4px 0' : '4px 0 8px 0'};
+        ${index > 0 ? 'border-top: 1px solid rgba(0,0,0,0.1);' : ''}
+      ">
+        <span class="takeaway-text">${takeaway.key_point}</span>
+      </div>
+    `).join('');
+    
+    // Flash the dot
+    if (takeawayDot) {
+      takeawayDot.style.opacity = '1';
+      takeawayDot.style.transform = 'scale(1.5)';
+      setTimeout(() => {
+        takeawayDot.style.transform = 'scale(1)';
+      }, 300);
     }
 
-    // Start wipe-in transition
-    wipeOverlay.style.transform = 'scaleX(1)';
-    
-    // Wait longer (500ms) before updating content
-    setTimeout(() => {
-      // Update content while overlay is covering
-      // Find the index of this takeaway in the full takeaways array
-      const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === uniqueTakeaways[0].key_point) + 1;
-      titleSpan.textContent = `Key Takeaway${uniqueTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
+    // Update all takeaways list
+    const allList = container.querySelector('.all-takeaways-list');
+    if (allList && currentTakeaways?.takeaways) {
+      const currentKeys = new Set(uniqueTakeaways.map(t => t.key_point));
       
-      content.innerHTML = uniqueTakeaways.map((takeaway, index) => `
-        <div class="takeaway-item" style="
-          padding: ${index === 0 ? '8px 0 4px 0' : '4px 0 8px 0'}; 
-          text-shadow: none;
-          ${index > 0 ? 'border-top: 1px solid rgba(0,0,0,0.1);' : ''}
-        ">
-          <span class="takeaway-text"></span>
-        </div>
-      `).join('');
-      
-      const textElements = content.querySelectorAll('.takeaway-text');
-      
-      // Flash the dot
-      if (takeawayDot) {
-        takeawayDot.style.transform = 'scale(1.5)';
-        setTimeout(() => {
-          takeawayDot.style.transform = 'scale(1)';
-        }, 300);
-      }
-
-      // Start wipe-out transition after a longer delay (800ms)
-      setTimeout(() => {
-        wipeOverlay.style.transform = 'scaleX(0)';
-      }, 800);
-
-      // Delay the typewriter effect to account for longer overlay
-      textElements.forEach((element, index) => {
-        if (isFirstShow) {
-          setTimeout(() => {
-            typewriterEffect(element, uniqueTakeaways[index].key_point);
-          }, index * 1000 + 1100); // Increased delay to account for longer overlay
-        } else {
-          element.textContent = uniqueTakeaways[index].key_point;
-        }
-      });
-
-      // --- Render all takeaways list ---
-      const allList = container.querySelector('.all-takeaways-list');
-      if (allList && currentTakeaways?.takeaways) {
-        const currentKeys = new Set(uniqueTakeaways.map(t => t.key_point));
+      // Only rebuild the list if it's not already populated
+      if (allList.children.length === 0 || allList.dataset.lastUpdated !== currentTakeaways.id) {
         allList.innerHTML = currentTakeaways.takeaways.map((t, i) => `
-          <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}">
-            <span style="font-size:12px;color:#888;margin-right:8px;">${i+1}.</span> ${t.key_point}
+          <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}" data-key="${t.key_point}">
+            <div class="takeaway-dot"></div>
+            <span class="takeaway-number">${i+1}.</span>
+            <span class="takeaway-content">${t.key_point}</span>
           </div>
         `).join('');
+        allList.dataset.lastUpdated = currentTakeaways.id;
+      } else {
+        // Just update the current class
+        Array.from(allList.querySelectorAll('.all-takeaway-item')).forEach(item => {
+          const keyPoint = item.dataset.key;
+          if (currentKeys.has(keyPoint)) {
+            item.classList.add('current');
+          } else {
+            item.classList.remove('current');
+          }
+        });
       }
-      // ---
-    }, 500); // Increased delay before content update
+      
+      // Scroll to the current takeaway
+      const currentItem = allList.querySelector('.all-takeaway-item.current');
+      if (currentItem) {
+        // Scroll the item into view with some padding
+        const containerRect = allList.getBoundingClientRect();
+        const itemRect = currentItem.getBoundingClientRect();
+        
+        // Calculate if the item is fully visible
+        const isFullyVisible = 
+          itemRect.top >= containerRect.top && 
+          itemRect.bottom <= containerRect.bottom;
+        
+        if (!isFullyVisible) {
+          // Scroll to position the item in the center
+          const scrollTop = 
+            itemRect.top + 
+            allList.scrollTop - 
+            containerRect.top - 
+            (containerRect.height / 2) + 
+            (itemRect.height / 2);
+          
+          allList.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }
   }
 }
 
@@ -550,11 +311,6 @@ function setupVideoTracking(video) {
   };
   
   video.addEventListener('timeupdate', videoTimeUpdateListener);
-  video.addEventListener('durationchange', () => {
-    if (currentTakeaways) {
-      updateMarkers(video, currentTakeaways.takeaways);
-    }
-  });
   
   setupVideoSeekListener(video);
 }
@@ -570,10 +326,35 @@ function checkForVideo() {
       if (currentTakeaways) {
         initializeUI();
         setTimeout(() => {
-          updateMarkers(video, currentTakeaways.takeaways);
           updateUI(video, video.currentTime, currentTakeaways.takeaways);
         }, 100);
       }
+    }
+  }
+}
+
+function checkTimeRequirements(video) {
+  const tabOpenDuration = (Date.now() - tabOpenTime) / 1000;
+  
+  if (tabOpenDuration >= MIN_TIME_REQUIRED && videoPlaybackTime >= MIN_TIME_REQUIRED) {
+    const videoId = new URL(location.href).searchParams.get('v');
+    if (!processedVideos.has(videoId)) {
+      console.log('[YT Captions] Time requirements met, checking cache');
+      processedVideos.add(videoId);
+      
+      // Check cache first
+      chrome.storage.local.get(`takeaways_${videoId}`, (result) => {
+        if (result[`takeaways_${videoId}`]) {
+          console.log('[YT Captions] Found cached takeaways');
+          currentTakeaways = result[`takeaways_${videoId}`];
+          initializeUI(); // Only create UI when we have cached data
+          updateUI(video, video.currentTime, currentTakeaways.takeaways);
+        } else {
+          console.log('[YT Captions] No cache found, requesting new takeaways');
+          // Don't create UI yet, wait for relevance check
+          chrome.runtime.sendMessage({ type: 'NEW_VIDEO', videoId });
+        }
+      });
     }
   }
 }
@@ -596,13 +377,9 @@ document.addEventListener('yt-navigate-start', () => {
   currentTakeaways = null;
   
   // Clear UI
-  const existingProgress = document.querySelector('.yt-takeaways-progress');
-  const existingTakeaways = document.querySelector('.yt-video-takeaways');
-  const existingQuiz = document.querySelector('.yt-video-quiz');
+  const existingTakeaways = document.querySelector('.yt-takeaways-card');
   
-  if (existingProgress) existingProgress.remove();
   if (existingTakeaways) existingTakeaways.remove();
-  if (existingQuiz) existingQuiz.remove();
   
   takeawaysContainer = null;
 });
@@ -707,14 +484,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     updateTakeawaysStatus(message.status);
   } else if (message.type === 'VIDEO_TAKEAWAYS') {
     // Clear any loading states
-    const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
     const statusElement = document.querySelector('.takeaways-status');
     const retryButton = document.querySelector('.retry-button');
-    
-    // Remove loading UI
-    if (loadingUI) {
-      loadingUI.remove();
-    }
     
     // Reset status if it exists
     if (statusElement) {
@@ -740,13 +511,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       currentTakeaways = message.takeaways;
       const video = document.querySelector('video');
       if (video) {
-        updateMarkers(video, message.takeaways.takeaways);
         updateUI(video, video.currentTime, message.takeaways.takeaways);
       }
     }
   } else if (message.type === 'PROCESSING_ERROR') {
     // Clear loading states and show error
-    const loadingUI = document.querySelector('.yt-takeaways-progress.initial-loading');
     const statusElement = document.querySelector('.takeaways-status');
     const retryButton = document.querySelector('.retry-button');
     
@@ -765,13 +534,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     updateTakeawaysStatus('ERROR', message.error);
-
-    // Remove loading UI after showing error
-    setTimeout(() => {
-      if (loadingUI) {
-        loadingUI.remove();
-      }
-    }, 3000);
   }
 });
 
