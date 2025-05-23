@@ -1,7 +1,7 @@
 importScripts('geminiModels.js');
 
 // Add a prompt version constant to track changes to the prompt
-const PROMPT_VERSION = 1; // Increment this when the prompt is significantly changed
+const PROMPT_VERSION = 1.2; // Increment this when the prompt is significantly changed
 
 async function getVideoDetails(message) {
   const videoId = message.videoId;
@@ -46,6 +46,8 @@ async function getVideoDetails(message) {
       const captionsMatch = html.match(/"captions":(\{.+?\}),"videoDetails/);
       if (captionsMatch) {
         const captionsData = captionsMatch[1];
+        console.log('[YT Video] Captions captionsMatch:', captionsMatch[0]);
+        console.log('[YT Video] Captions captionsMatch:', captionsMatch[1]);
         const { playerCaptionsTracklistRenderer } = JSON.parse(captionsData);
         
         if (playerCaptionsTracklistRenderer?.captionTracks) {
@@ -335,24 +337,38 @@ async function isRelevantContent(videoDetails) {
     return false;
   }
   
+  // Check if captions exist and have items
+  if (!videoDetails?.captions?.items || !Array.isArray(videoDetails.captions.items) || videoDetails.captions.items.length === 0) {
+    console.error('[YT Video] No caption items available for content relevance check');
+    return true; // Default to true if we can't check
+  }
+  
   // Sample captions throughout the video to get a good overview
   const captionCount = videoDetails.captions.items.length;
-  const sampleSize = 10;
+  const sampleSize = Math.min(10, captionCount); // Ensure we don't try to sample more than available
   const sampledCaptions = [];
   
   for (let i = 0; i < sampleSize; i++) {
     const index = Math.floor((i / sampleSize) * captionCount);
-    sampledCaptions.push(videoDetails.captions.items[index].text);
+    if (index < captionCount && videoDetails.captions.items[index] && videoDetails.captions.items[index].text) {
+      sampledCaptions.push(videoDetails.captions.items[index].text);
+    }
+  }
+
+  // If we couldn't sample any captions, default to true
+  if (sampledCaptions.length === 0) {
+    console.warn('[YT Video] No valid captions sampled for content relevance check');
+    return true;
   }
 
   const prompt = `
     Determine if this YouTube video is a podcast, interview, essay, commentary, or long-form educational content.
     Return only "true" or "false".
 
-    Title: ${videoDetails.video.title}
-    Channel: ${videoDetails.channel.name}
-    Duration: ${Math.floor(videoDetails.video.lengthSeconds / 60)} minutes
-    Description: ${videoDetails.video.description}
+    Title: ${videoDetails.video.title || 'Unknown'}
+    Channel: ${videoDetails.channel.name || 'Unknown'}
+    Duration: ${Math.floor((videoDetails.video.lengthSeconds || 0) / 60)} minutes
+    Description: ${videoDetails.video.description || 'No description'}
 
     Sample transcript:
     ${sampledCaptions.join(' ')}
@@ -385,17 +401,24 @@ async function isRelevantContent(videoDetails) {
 
     if (!response.ok) {
       console.error('[YT Video] Relevance Check API Error:', response.status);
-      return false;
+      return true; // Default to true if API call fails
     }
 
     const data = await response.json();
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase().trim() === 'true';
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!responseText) {
+      console.error('[YT Video] Empty response from relevance check');
+      return true; // Default to true if response is empty
+    }
+    
+    const result = responseText.toLowerCase().trim() === 'true';
     console.log('[YT Video] Content relevance check:', result);
     return result;
 
   } catch (error) {
     console.error('[YT Video] Relevance Check Error:', error);
-    return false;
+    return true; // Default to true if there's an error
   }
 }
 
@@ -523,10 +546,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         
         // No cache hit or regeneration requested, proceed with generating new takeaways
         const videoDetails = await getVideoDetails(message);
-        if (!videoDetails || !videoDetails.captions.available) {
+        
+        // Check if video details were successfully retrieved
+        if (!videoDetails) {
           chrome.tabs.sendMessage(sender.tab.id, {
             type: 'PROCESSING_ERROR',
-            error: 'No captions available'
+            error: 'Could not retrieve video details'
+          });
+          return;
+        }
+        
+        // Check if captions are available
+        if (!videoDetails.captions || !videoDetails.captions.available || 
+            !videoDetails.captions.items || videoDetails.captions.items.length === 0) {
+          chrome.tabs.sendMessage(sender.tab.id, {
+            type: 'PROCESSING_ERROR',
+            error: 'No captions available for this video'
           });
           return;
         }
@@ -539,7 +574,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           status: 'CHECKING_RELEVANCE'
         });
         
-        const isRelevant = await isRelevantContent(videoDetails);
+        let isRelevant = false;
+        try {
+          isRelevant = await isRelevantContent(videoDetails);
+        } catch (relevanceError) {
+          console.error('[YT Video] Error checking content relevance:', relevanceError);
+          // Default to true if there's an error checking relevance
+          isRelevant = true;
+        }
         
         if (!isRelevant) {
           chrome.tabs.sendMessage(sender.tab.id, {
@@ -549,53 +591,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        // Create initial loading UI
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: sender.tab.id },
-            func: () => {
-              if (!document.querySelector('.yt-takeaways-progress')) {
-                const secondary = document.querySelector('#secondary-inner');
-                if (secondary) {
-                  secondary.insertBefore(createInitialLoadingUI(), secondary.firstChild);
-                }
-              }
-            }
-          });
-
-          // Update status - generating takeaways
-          chrome.tabs.sendMessage(sender.tab.id, {
-            type: 'PROCESSING_STATUS',
-            status: 'GENERATING_TAKEAWAYS'
-          });
-          
-          const takeaways = await getVideoSummary(videoDetails);
-          if (!takeaways) {
-            throw new Error('Failed to generate takeaways');
-          }
-          
-          // Store takeaways in cache before sending
-          await storeTakeawaysInCache(message.videoId, takeaways);
-          
-          // Send takeaways to content script
-          chrome.tabs.sendMessage(sender.tab.id, {
-            type: 'VIDEO_TAKEAWAYS',
-            takeaways: takeaways,
-            fromCache: false
-          });
-
-        } catch (error) {
-          console.error('[YT Video] Processing error:', error);
-          chrome.tabs.sendMessage(sender.tab.id, {
-            type: 'PROCESSING_ERROR',
-            error: error.message || 'Failed to process video'
-          });
+        // Update status - generating takeaways
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: 'PROCESSING_STATUS',
+          status: 'GENERATING_TAKEAWAYS'
+        });
+        
+        const takeaways = await getVideoSummary(videoDetails);
+        if (!takeaways || !takeaways.takeaways || !Array.isArray(takeaways.takeaways) || takeaways.takeaways.length === 0) {
+          throw new Error('Failed to generate takeaways');
         }
+        
+        // Store takeaways in cache before sending
+        await storeTakeawaysInCache(message.videoId, takeaways);
+        
+        // Send takeaways to content script
+        chrome.tabs.sendMessage(sender.tab.id, {
+          type: 'VIDEO_TAKEAWAYS',
+          takeaways: takeaways,
+          fromCache: false
+        });
+
       } catch (error) {
-        console.error('[YT Video] Top-level error:', error);
+        console.error('[YT Video] Processing error:', error);
         chrome.tabs.sendMessage(sender.tab.id, {
           type: 'PROCESSING_ERROR',
-          error: 'An unexpected error occurred'
+          error: error.message || 'Failed to process video'
         });
       }
     })();

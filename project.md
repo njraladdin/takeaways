@@ -7,5 +7,5 @@ TODO:
 - add caching feature if same vidoe and same model and same prompt, done 
 
 
-- loading video details is taking too long + only shows up when the video is playing 
+- loading video details is stuck when video is not playing 
 
