@@ -1,5 +1,8 @@
 importScripts('geminiModels.js');
 
+// Add a prompt version constant to track changes to the prompt
+const PROMPT_VERSION = 1; // Increment this when the prompt is significantly changed
+
 async function getVideoDetails(message) {
   const videoId = message.videoId;
   
@@ -439,7 +442,7 @@ async function validateApiKey(apiKey) {
 // Add cache management functions
 async function getCachedTakeaways(videoId) {
   try {
-    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}`;
+    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}_v${PROMPT_VERSION}`;
     const result = await chrome.storage.local.get(cacheKey);
     
     if (result[cacheKey]) {
@@ -457,7 +460,7 @@ async function getCachedTakeaways(videoId) {
 
 async function storeTakeawaysInCache(videoId, takeaways) {
   try {
-    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}`;
+    const cacheKey = `takeaways_${videoId}_${GEMINI_TAKEAWAYS_MODEL}_v${PROMPT_VERSION}`;
     
     // Deduplicate takeaways before caching
     if (takeaways.takeaways && Array.isArray(takeaways.takeaways)) {
@@ -480,10 +483,11 @@ async function storeTakeawaysInCache(videoId, takeaways) {
       }
     }
     
-    // Add a timestamp to the cached data
+    // Add a timestamp and prompt version to the cached data
     const cachedData = {
       ...takeaways,
-      cachedAt: new Date().toISOString()
+      cachedAt: new Date().toISOString(),
+      promptVersion: PROMPT_VERSION
     };
     
     await chrome.storage.local.set({ [cacheKey]: cachedData });
