@@ -411,8 +411,21 @@ function updateTakeawayContent(relevantTakeaways) {
   
   if (!content || !titleSpan) return;
 
+  // Deduplicate by key_point
+  const uniqueTakeaways = [];
+  const seen = new Set();
+  for (const t of relevantTakeaways) {
+    if (!seen.has(t.key_point)) {
+      uniqueTakeaways.push(t);
+      seen.add(t.key_point);
+    }
+  }
+  if (uniqueTakeaways.length < relevantTakeaways.length) {
+    console.warn('[YT Captions] Duplicate key takeaways detected and removed:', relevantTakeaways);
+  }
+
   // Create a string of all takeaway content to check for changes
-  const newContent = relevantTakeaways.map(t => t.key_point).join('|||');
+  const newContent = uniqueTakeaways.map(t => t.key_point).join('|||');
   if (content.dataset.currentTakeaway === newContent) return;
   
   // Track if these takeaways are being shown for the first time
@@ -425,7 +438,7 @@ function updateTakeawayContent(relevantTakeaways) {
     ? `${content.dataset.shownTakeaways},${newContent}`
     : newContent;
 
-  if (relevantTakeaways.length > 0) {
+  if (uniqueTakeaways.length > 0) {
     let wipeOverlay = container.querySelector('.wipe-overlay');
     if (!wipeOverlay) {
       wipeOverlay = document.createElement('div');
@@ -457,10 +470,10 @@ function updateTakeawayContent(relevantTakeaways) {
     setTimeout(() => {
       // Update content while overlay is covering
       // Find the index of this takeaway in the full takeaways array
-      const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === relevantTakeaways[0].key_point) + 1;
-      titleSpan.textContent = `Key Takeaway${relevantTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
+      const takeawayIndex = currentTakeaways.takeaways.findIndex(t => t.key_point === uniqueTakeaways[0].key_point) + 1;
+      titleSpan.textContent = `Key Takeaway${uniqueTakeaways.length > 1 ? 's' : ''} #${takeawayIndex}`;
       
-      content.innerHTML = relevantTakeaways.map((takeaway, index) => `
+      content.innerHTML = uniqueTakeaways.map((takeaway, index) => `
         <div class="takeaway-item" style="
           padding: ${index === 0 ? '8px 0 4px 0' : '4px 0 8px 0'}; 
           text-shadow: none;
@@ -489,17 +502,17 @@ function updateTakeawayContent(relevantTakeaways) {
       textElements.forEach((element, index) => {
         if (isFirstShow) {
           setTimeout(() => {
-            typewriterEffect(element, relevantTakeaways[index].key_point);
+            typewriterEffect(element, uniqueTakeaways[index].key_point);
           }, index * 1000 + 1100); // Increased delay to account for longer overlay
         } else {
-          element.textContent = relevantTakeaways[index].key_point;
+          element.textContent = uniqueTakeaways[index].key_point;
         }
       });
 
       // --- Render all takeaways list ---
       const allList = container.querySelector('.all-takeaways-list');
       if (allList && currentTakeaways?.takeaways) {
-        const currentKeys = new Set(relevantTakeaways.map(t => t.key_point));
+        const currentKeys = new Set(uniqueTakeaways.map(t => t.key_point));
         allList.innerHTML = currentTakeaways.takeaways.map((t, i) => `
           <div class="all-takeaway-item${currentKeys.has(t.key_point) ? ' current' : ''}">
             <span style="font-size:12px;color:#888;margin-right:8px;">${i+1}.</span> ${t.key_point}
