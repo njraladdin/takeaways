@@ -218,12 +218,13 @@ function updateTakeawayContent(relevantTakeaways) {
       ? `${hours}:${mins.toString().padStart(2, '0')}`
       : `${mins}:00`;
     
-    titleSpan.textContent = `Key Takeaway #${takeawayIndex} (${timestamp})`;
+    // Update the header with the takeaway number and timestamp
+    titleSpan.innerHTML = `Key Takeaway <strong>#${takeawayIndex}</strong> <span class="takeaway-header-timestamp">${timestamp}</span>`;
     
     // Display takeaway in the content area
     content.innerHTML = uniqueTakeaways.map((takeaway, index) => `
       <div class="takeaway-item" style="
-        padding: ${index === 0 ? '8px 0 4px 0' : '4px 0 8px 0'};
+        padding: ${index === 0 ? '12px 0 8px 0' : '8px 0 12px 0'};
         ${index > 0 ? 'border-top: 1px solid rgba(0,0,0,0.1);' : ''}
       ">
         <span class="takeaway-text">${takeaway.key_point}</span>
